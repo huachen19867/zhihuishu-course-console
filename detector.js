@@ -60,6 +60,8 @@
     return [...byLetter.values()].sort((a, b) => a.letter.localeCompare(b.letter));
   }
   function findClose(modal) {
+    const modernClose=modal.querySelector('.close-box, .ai-class-exercise-dialog-header .header-icon');
+    if(modernClose&&visible(modernClose))return modernClose;
     const buttons = [...modal.querySelectorAll('button, [role="button"], a, input[type="button"]')].filter(visible);
     const textControls = leaves(modal).map(x => x.el).filter(el => {
       const text = (el.innerText || '').trim(), box = el.getBoundingClientRect();
@@ -98,6 +100,7 @@
     if (target.getAttribute('aria-checked') === 'true') return true;
     if (target.querySelector('[aria-checked="true"], input[type="radio"]:checked, input[type="checkbox"]:checked')) return true;
     if (target.querySelector('.topic-option-item.active, .item-topic.active')) return true;
+    if (target.querySelector('.class-question-select.isSelect')) return true;
     return /(?:^|[\s_-])(checked|selected|active|chosen)(?:$|[\s_-])/iu.test(target.className?.toString() || '');
   }
   function clickPoint(option) {
@@ -112,6 +115,22 @@
     return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
   }
   function read() {
+    const modern=[...document.querySelectorAll('.ai-test-question-wrapper, .ai-class-exercise-dialog')].find(visible);
+    if(modern){
+      const cards=[...modern.querySelectorAll('.ques-card-box, .ques-list .item')].filter(visible);
+      if(cards.length!==1)return null;
+      const card=cards[0],question=card.querySelector('.question, .question-info')?.textContent?.trim(),raw=card.querySelector('.type')?.textContent||'';
+      const opts=[...card.querySelectorAll('.option')].map(target=>({
+        letter:target.querySelector('.class-question-select')?.textContent?.trim(),
+        text:target.querySelector('.answer')?.textContent?.trim(),target,radio:null,
+      }));
+      if(!question||!questionRE.test(raw)||opts.length<2||opts.some(o=>!o.text||!/^([A-H])$/u.test(o.letter)))return null;
+      const submit=modern.querySelector('.submit-btn, .dialog-footer button:not(.is-finish)');
+      return {modal:modern,question,multiple:/多选题/u.test(raw),options:opts,
+        submit:submit&&visible(submit)&&/提交/u.test(submit.innerText)?submit:null,
+        fingerprint:JSON.stringify([question,...opts.map(o=>[o.letter,o.text])]),
+      };
+    }
     const modal = findModal();
     if (!modal) return null;
     const opts = findOptions(modal);

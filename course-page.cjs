@@ -1,5 +1,5 @@
 function isVideoCourseUrl(value){
- try{const u=new URL(value);return (u.hostname==='studyvideoh5.zhihuishu.com'&&u.pathname==='/stuStudy')||(u.hostname==='studywisdomh5.zhihuishu.com'&&u.pathname==='/study/index');}catch{return false;}
+ try{const u=new URL(value);return (u.hostname==='studyvideoh5.zhihuishu.com'&&u.pathname==='/stuStudy')||(['studywisdomh5.zhihuishu.com','wisdom-mooc.zhihuishu.com'].includes(u.hostname)&&u.pathname==='/study/index');}catch{return false;}
 }
 function sameCourseUrl(actual,expected){
  if(!isVideoCourseUrl(actual)||!isVideoCourseUrl(expected))return false;

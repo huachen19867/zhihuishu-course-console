@@ -3,6 +3,7 @@ const path=require('node:path');
 const {spawn,execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const {loadConfig}=require('./config.cjs');
+const {findCoursePage,isVideoCourseUrl}=require('./course-page.cjs');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
  const mode=process.argv[2],config=loadConfig();
@@ -28,6 +29,16 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const r=await fetch(endpoint+'/json/list',{signal:AbortSignal.timeout(3000)});
   const pages=await r.json();
   if(!pages.some(p=>p.url?.includes('onlineexamh5new.zhihuishu.com/stuExamWeb.html#/webExamList?')))throw Error('Open the unit test list first.');
+ }
+ if(mode==='video'&&config.courseUrl){
+  if(!isVideoCourseUrl(config.courseUrl))throw Error('配置的链接不是已支持的智慧树视频页面');
+  const browser=await require('playwright').chromium.connectOverCDP(config.cdpUrl);
+  try{
+   if(!await findCoursePage(browser,config)){
+    const tab=await browser.contexts()[0].newPage();
+    await tab.goto(config.courseUrl,{waitUntil:'domcontentloaded',timeout:30000});
+   }
+  }finally{await browser.close()}
  }
  const stopFile=path.join(runtime,'STOP');if(fs.existsSync(stopFile))fs.unlinkSync(stopFile);
  const args=mode==='homework'?[path.join(__dirname,'homework/auto.cjs')]:[path.join(__dirname,'watch-course.cjs'),'--wait-for-course'];

@@ -4,8 +4,9 @@ const {loadConfig}=require('./config.cjs');
 const {generateJson}=require('./model.cjs');
 const config=loadConfig();
 const {findCoursePage,sameCourseUrl,isVideoCourseUrl}=require('./course-page.cjs');
+const {readCatalogueDom}=require('./catalogue.cjs');
 const { chromium } = require('playwright');
-const { resumePlayback } = require('./playback.cjs');
+const { resumePlayback,setPlaybackPreferences } = require('./playback.cjs');
 const {waitForVerification,verificationVisible}=require('./verification.cjs');
 const base = __dirname;
 const run = path.join(base, 'runtime');
@@ -18,6 +19,7 @@ const solver = path.join(run, 'solver');
 fs.mkdirSync(solver, { recursive: true });
 let cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'utf8')) : {};
 let browser, page, lastTitle, stalledSince, lastTime = -1, previousEvent;
+const completionRefreshes=new Set();
 let courseUrl = config.courseUrl;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function showStatus(message, failed=false) {
@@ -37,31 +39,28 @@ function event(kind, info = {}) {
 }
 async function inspect() {
   if (!page || page.isClosed() || !sameCourseUrl(page.url(),courseUrl)) throw Error('课程窗口已关闭或离开指定课程，停止操作');
+  await page.locator('li.video, .child-info.hasvideo, .chapter-item').first().waitFor({state:'attached',timeout:15000});
+  await page.locator('.el-collapse-item__header[aria-expanded="false"]').evaluateAll(es=>es.forEach(e=>e.click()));
+  await page.locator('#vjs_container_html5_api, video:not(.virtual-human-video)').first().waitFor({state:'attached',timeout:15000});
   await page.evaluate(detector);
-  return page.evaluate(() => {
+  const catalogue=await page.evaluate(readCatalogueDom);
+  return page.evaluate(catalogue => {
     const d = window.__wisdomJevDetector;
     const q = d.read();
     if (q) {
       q.modal.setAttribute('data-course-watch', 'question');
       q.options.forEach(o => o.target.setAttribute('data-course-answer', o.letter));
       d.findClose(q.modal)?.setAttribute('data-course-watch', 'close');
+      q.submit?.setAttribute('data-course-watch','submit');
     }
-    const rows = [...document.querySelectorAll('li.video')].map((e, index) => ({
-      index, title: e.querySelector('.catalogue_title')?.textContent?.trim(),
-      current: e.classList.contains('current_play'),
-      done: !!e.querySelector('.time_icofinish') || e.querySelector('[aria-valuenow="100"]') !== null,
-      progress: e.querySelector('.progress-num')?.textContent?.trim() || null,
-    }));
-    const v = document.querySelector('video');
     const dialogs = [...document.querySelectorAll('[role="dialog"]')].filter(d.visible)
       .map(e => e.innerText?.trim()).filter(Boolean);
     return {
-      title: document.querySelector('#lessonOrder')?.textContent?.trim(), rows,
-      video: v ? { time: v.currentTime, duration: v.duration, paused: v.paused, ended: v.ended, rate: v.playbackRate, muted:v.muted, volume:v.volume } : null,
-      question: q ? { question: q.question, multiple:q.multiple, options: q.options.map(o => ({ letter: o.letter, text: o.text })), fingerprint: q.fingerprint, answered: d.answerFeedback(q.modal) } : null,
+      ...catalogue,
+      question: q ? { question: q.question, multiple:q.multiple, requiresSubmit:!!q.submit, options: q.options.map(o => ({ letter: o.letter, text: o.text })), fingerprint: q.fingerprint, answered: d.answerFeedback(q.modal) } : null,
       dialogs,
     };
-  });
+  },catalogue);
 }
 async function solve(q, force = false) {
   if (!force && cache[q.fingerprint]) return cache[q.fingerprint];
@@ -101,6 +100,13 @@ async function handleQuestion(q) {
       event('answered', { question: q.question, answer });
     }
   }
+  const current=await inspect();
+  if(current.question?.requiresSubmit){
+    await page.locator('[data-course-watch="submit"]:visible').first().click({timeout:8000});
+    await page.waitForFunction(()=>{const d=window.__wisdomJevDetector,q=d?.read();return !q||!q.submit||d.answerFeedback(q.modal)},null,{timeout:10000});
+    event('question-submitted');
+  }
+  if(!(await inspect()).question){event('question-closed');return;}
   await page.locator('[data-course-watch="close"]:visible').first().click({ timeout: 8000 });
   await sleep(1000);
   if ((await inspect()).question) throw Error('答题弹窗未关闭，停止');
@@ -163,16 +169,31 @@ async function main() {
     if (state.question) { await handleQuestion(state.question); lastTime = -1; stalledSince = null; continue; }
     if (state.dialogs.length) throw Error('出现需人工确认的弹窗，停止：' + state.dialogs.join(' / ').slice(0,800));
     if (!state.video) throw Error('未找到视频播放器');
-    await page.evaluate(() => { const v = document.querySelector('video'); if (v) { v.muted = true; v.playbackRate = 1.5; } });
+    if(!state.video.ended){
+      if(state.video.paused)await resumePlayback(page);
+      await setPlaybackPreferences(page);
+    }
     if (state.video.ended) {
       if (current && !current.done) {
         const endedKey = 'waiting-completion:' + state.title;
         if (previousEvent !== endedKey) { event('waiting-completion', { title: state.title }); previousEvent = endedKey; stalledSince = Date.now(); }
+        await showStatus('视频已播完，等待网站更新学习完成标记');
+        fs.writeFileSync(stateFile,JSON.stringify({...state,running:true,pending:pending.length,waitingCompletion:true,updated:new Date().toISOString()}));
+        if(Date.now()-stalledSince>30000&&!completionRefreshes.has(state.title)){
+          completionRefreshes.add(state.title);event('refresh-completion',{title:state.title});
+          await waitVerification();
+          if(fs.existsSync(stopFile))continue;
+          await page.reload({waitUntil:'domcontentloaded'});
+          await inspect();
+          await resumePlayback(page);
+          await setPlaybackPreferences(page);
+          lastTime=-1;stalledSince=null;previousEvent=null;continue;
+        }
         if (Date.now() - stalledSince > 90000) throw Error('视频结束但学习完成标记仍未更新，停止核验');
       } else {
         const next = state.rows.find(r => !r.done && r.index > (current?.index ?? -1)) || pending[0];
         if (!next) { event('complete', { videos: state.rows.length }); fs.writeFileSync(stateFile, JSON.stringify({ running:false, complete:true, videos:state.rows.length, updated:new Date().toISOString() })); return; }
-        await page.locator('li.video').nth(next.index).locator('.catalogue_title').click({ timeout: 10000 });
+        await page.locator(state.catalogueSelector).nth(next.index).locator(state.titleSelector).click({ timeout: 10000 });
         event('next-video', { title: next.title });
         await sleep(3000); lastTime = -1; stalledSince = null; previousEvent = null;
         continue;

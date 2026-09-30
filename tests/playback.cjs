@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
-const { resumePlayback } = require('../playback.cjs');
+const { resumePlayback,setPlaybackPreferences } = require('../playback.cjs');
 async function fixture(page, mode) {
   await page.setContent('<style>.area{position:relative;width:400px;height:240px}video,.videoArea{position:absolute;width:400px;height:240px}#playButton{position:absolute;bottom:0;width:40px;height:30px;transition:opacity .1s}</style><div class="area"><video></video><div class="videoArea"></div><div id="playButton">Play</div></div>');
   await page.evaluate(mode => {
@@ -21,6 +21,10 @@ async function fixture(page, mode) {
   const browser=await chromium.launch({channel:'msedge',headless:true});
   try {
     const page=await browser.newPage();
+    await page.setContent('<video></video><button class="speedTab active" rate="1.0">1</button><button class="speedTab" rate="1.5">1.5</button>');
+    await page.evaluate(()=>{window.siteRate=1;document.querySelector('[rate="1.5"]').onclick=e=>{if(!e.isTrusted)return;document.querySelectorAll('.speedTab').forEach(x=>x.classList.remove('active'));e.currentTarget.classList.add('active');window.siteRate=1.5;};});
+    await setPlaybackPreferences(page);
+    assert.deepEqual(await page.evaluate(()=>{const v=document.querySelector('video');return [window.siteRate,v.playbackRate,v.muted,v.volume]}),[1.5,1.5,true,0]);
     await fixture(page,'hidden-control');
     await resumePlayback(page);
     assert.equal(await page.evaluate(()=>window.trustedClicks),1);

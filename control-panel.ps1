@@ -132,6 +132,7 @@ function Update-Panel {
         $status.Text = '运行中'
         if ($state.waitingForCourse) { $status.Text = '等待登录并打开课程：' + $state.courseName }
         elseif ($state.waitingVerification) { $status.Text = '等待你手动完成人机验证；完成后自动继续' }
+        elseif ($state.waitingCompletion) { $status.Text = '视频已播完，等待网站更新学习完成标记' }
         elseif ($state.question) { $status.Text = '正在处理弹题' }
         $status.ForeColor = [System.Drawing.Color]::ForestGreen
     } elseif ($script:launcher) {

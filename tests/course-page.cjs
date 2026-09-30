@@ -4,6 +4,7 @@ const {findCoursePage,sameCourseUrl,isVideoCourseUrl}=require('../course-page.cj
  const first='https://studyvideoh5.zhihuishu.com/stuStudy?recruitAndCourseId=test-course';
  const second='https://studywisdomh5.zhihuishu.com/study/index?recruitAndCourseId=test-course';
  assert.equal(sameCourseUrl(first,second),true);
+ assert.equal(sameCourseUrl(first,second.replace('studywisdomh5','wisdom-mooc')),true);
  assert.equal(sameCourseUrl(first+'#video2',first),true);
  assert.equal(sameCourseUrl(second.replace('test-course','other-course'),first),false);
  assert.equal(isVideoCourseUrl('https://login.zhihuishu.com/'),false);

@@ -37,3 +37,11 @@
 启动器整理为轻量PowerShell入口与launcher.cjs，统一处理连接、独立浏览器和后台启动，减少平台脚本重复。批处理使用相对路径，Git按CRLF保存Windows入口。
 
 发布检查：JavaScript与PowerShell语法通过，控制台SmokeTest通过；npm test通过弹题、隐藏播放控件/停滞、人机验证等待、兼容API的JSON与错误处理、Agent文件请求ID匹配检查。模型适配测试使用模拟数据，不消耗付费模型额度。暂存文件敏感模式检查未发现个人课程ID或密钥；个人配置和运行目录在gitignore中排除。真实国内服务商及不同课程页面仍需用户Agent验证。
+
+## 2026-09-30 新版课程入口、原生倍速与随堂题适配
+
+复用项目已有Playwright与Edge CDP，不新增扩展。现场发现新版入口为wisdom-mooc.zhihuishu.com/study/index；course-page.cjs允许同一课程参数在三个已支持域名路由间变化，launcher在已连接浏览器但目标页缺失时打开配置入口。catalogue.cjs集中适配经典li.video、child-info.hasvideo和chapter-item/子视频目录，展开折叠章节，排除分组与隐藏数字人视频。完成标记读取网站100%或finish-icon，不能把媒体结束直接当作课程完成。
+
+仅修改video.playbackRate会让网站仍显示X1.0；对倍速控件执行DOM click又会被新版页面拒绝并跳回首页。改为正常鼠标悬停与点击原生倍速选项，核验active后设置静音，确认currentTime持续推进。结束后缺完成标记，每个标题最多普通刷新一次并正常补播，不改播放进度或学习数据；刷新前仍检测人机验证并等待本人。
+
+随堂题支持ai-test-question-wrapper以及ai-class-exercise-dialog，识别提交作答/提交和已提交反馈，先核验答案选中，再提交并关闭；隐藏与未知弹窗仍保留页面明确报错。现场已观察网站完成图标、X1.5、静音、时间推进，以及已提交弹窗关闭后续播。新增三种目录、子视频排除、finish-icon、真实鼠标倍速事件及两种新版弹题的隔离测试。完整npm test和控制台SmokeTest通过；公开日志不包含实际课程ID或个人成绩。自动切到下一节另需现场观察，不能仅用隔离测试声称成功。

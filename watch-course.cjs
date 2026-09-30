@@ -14,6 +14,17 @@ const run = path.join(base, 'runtime');
 fs.mkdirSync(run, { recursive: true });
 const stopFile = path.join(run, 'STOP');
 const stateFile = path.join(run, 'status.json');
+const retryWait = new Int32Array(new SharedArrayBuffer(4));
+function writeStatus(value,spaces=0){
+  const data=JSON.stringify(value,null,spaces);
+  for(let attempt=0;attempt<25;attempt++){
+    try{fs.writeFileSync(stateFile,data);return;}
+    catch(error){
+      if(!['EBUSY','EPERM','EACCES'].includes(error.code)||attempt===24)throw error;
+      Atomics.wait(retryWait,0,0,100);
+    }
+  }
+}
 const cacheFile = path.join(run, 'answers.json');
 const detector = fs.readFileSync(path.join(base, 'detector.js'), 'utf8');
 const solver = path.join(run, 'solver');
@@ -122,7 +133,7 @@ async function waitVerification(){
   onWaiting:async()=>{
    event('waiting-verification');
    let prior={};try{prior=JSON.parse(fs.readFileSync(stateFile,'utf8'))}catch{}
-   fs.writeFileSync(stateFile,JSON.stringify({...prior,running:true,waitingVerification:true,updated:new Date().toISOString()}));
+   writeStatus({...prior,running:true,waitingVerification:true,updated:new Date().toISOString()});
    await showStatus('等待你手动完成人机验证；完成后自动继续',true);
   },onCleared:()=>{event('verification-cleared');lastTime=-1;stalledSince=null;}});
 }
@@ -152,14 +163,14 @@ async function main() {
   if (!page && process.argv.includes('--wait-for-course')) {
     const waitStart=Date.now();
     while(!page && !fs.existsSync(stopFile) && Date.now()-waitStart<600000){
-      fs.writeFileSync(stateFile,JSON.stringify({running:true,waitingForCourse:true,courseName:config.courseName,message:'请在独立Edge登录并打开课程：'+config.courseName,updated:new Date().toISOString()}));
+      writeStatus({running:true,waitingForCourse:true,courseName:config.courseName,message:'请在独立Edge登录并打开课程：'+config.courseName,updated:new Date().toISOString()});
       const loginPage=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url().includes('zhihuishu.com'));
       if(loginPage){page=loginPage;await showStatus('等待你登录并进入配置的课程');page=undefined;}
       await sleep(3000);
       page=await findCoursePage(browser,config);
       if(page)courseUrl=page.url();
     }
-    if(fs.existsSync(stopFile)){event('stopped');fs.writeFileSync(stateFile,JSON.stringify({running:false,stopped:true}));return;}
+    if(fs.existsSync(stopFile)){event('stopped');writeStatus({running:false,stopped:true});return;}
   }
   if(!page) throw Error('尚未进入课程，请进入课程后重新点击开始');
   while (!fs.existsSync(stopFile)) {
@@ -168,7 +179,7 @@ async function main() {
     if(!state.rows.length)throw Error('未识别到课程视频目录；页面可能尚未加载或需要适配，不会将其误报为完成');
     const current = state.rows.find(r => r.current);
     const pending = state.rows.filter(r => !r.done);
-    fs.writeFileSync(stateFile, JSON.stringify({ ...state, running: true, pending: pending.length, updated: new Date().toISOString() }, null, 2));
+    writeStatus({ ...state, running: true, pending: pending.length, updated: new Date().toISOString() },2);
     await showStatus('自动照看运行中 · 剩余'+pending.length+'节');
     if (state.title !== lastTitle) { event('playing', { title: state.title, pending: pending.length }); lastTitle = state.title; lastTime = -1; stalledSince = null; }
     if(state.playbackNotice){
@@ -187,7 +198,7 @@ async function main() {
         const endedKey = 'waiting-completion:' + state.title;
         if (previousEvent !== endedKey) { event('waiting-completion', { title: state.title }); previousEvent = endedKey; stalledSince = Date.now(); }
         await showStatus('视频已播完，等待网站更新学习完成标记');
-        fs.writeFileSync(stateFile,JSON.stringify({...state,running:true,pending:pending.length,waitingCompletion:true,updated:new Date().toISOString()}));
+        writeStatus({...state,running:true,pending:pending.length,waitingCompletion:true,updated:new Date().toISOString()});
         if(Date.now()-stalledSince>30000&&!completionRefreshes.has(state.title)){
           completionRefreshes.add(state.title);event('refresh-completion',{title:state.title});
           await waitVerification();
@@ -201,7 +212,7 @@ async function main() {
         if (Date.now() - stalledSince > 90000) throw Error('视频结束但学习完成标记仍未更新，停止核验');
       } else {
         const next = state.rows.find(r => !r.done && r.index > (current?.index ?? -1)) || pending[0];
-        if (!next) { event('complete', { videos: state.rows.length }); fs.writeFileSync(stateFile, JSON.stringify({ running:false, complete:true, videos:state.rows.length, updated:new Date().toISOString() })); return; }
+        if (!next) { event('complete', { videos: state.rows.length }); writeStatus({ running:false, complete:true, videos:state.rows.length, updated:new Date().toISOString() }); return; }
         await page.locator(state.catalogueSelector).nth(next.index).locator(state.titleSelector).click({ timeout: 10000 });
         event('next-video', { title: next.title });
         await sleep(3000); lastTime = -1; stalledSince = null; previousEvent = null;
@@ -220,7 +231,7 @@ async function main() {
     await sleep(3000);
   }
   event('stopped');
-  fs.writeFileSync(stateFile,JSON.stringify({running:false,stopped:true,updated:new Date().toISOString()}));
+  writeStatus({running:false,stopped:true,updated:new Date().toISOString()});
   await showStatus('自动照看已停止');
 }
 async function runWatcher(){try{await main()}catch(e){
@@ -228,7 +239,7 @@ async function runWatcher(){try{await main()}catch(e){
     try{await waitVerification();return await runWatcher()}catch(waitError){e=waitError;}
   }
   event('needs-attention', { message: e.message });
-  fs.writeFileSync(stateFile, JSON.stringify({ running:false, needsAttention:true, message:e.message, updated:new Date().toISOString() }, null, 2));
+  writeStatus({ running:false, needsAttention:true, message:e.message, updated:new Date().toISOString() },2);
   process.exitCode = 1;
   await showStatus('自动照看已停止：'+e.message.split('\n')[0].slice(0,140),true).catch(()=>{});
 }finally{if(browser)await browser.close()}}

@@ -58,3 +58,6 @@
 
 ## 2026-09-30 提交后弹窗重渲染导致关闭超时
 运行日志证明模型已回答且网站确认提交，但关闭按钮在前端重渲染时被替换，旧定位器悬等8秒后将任务停为需要关注。新增close-question.cjs，按题目fingerprint重读状态，弹窗已消失或新题出现则返回主循环；同题最多重试3次，停止信号和verification检查生效时不再点击。隔离测试已覆盖点击中弹窗被移除、一次临时失败后恢复、三次失败安全停止、新题变化和停止保护。后台已启动，当前导言视频时间推进中、1.5倍速且静音。
+
+## 2026-10-01 控制台轮询锁住watcher状态文件
+运行日志显示课程正常播放、答题提交并恢复后，Node watcher在更新runtime/status.json时收到Windows EBUSY，随即退出；控制台使用File.ReadAllText默认FileShare.Read，与写入冲突，导致错误状态也无法落盘。新增WriteStatus对EBUSY/EPERM/EACCES以100ms间隔有限重试25次；WinForms通过Read-SharedJson以FileShare.ReadWrite与FileShare.Delete共享读取，覆盖视频与作业状态。精确重启旧控制台实例与watcher后，页面继续运行，已观察到播放状态更新和后续弹题请求，rate=1.5、muted=true。未做整套测试以减少额度。

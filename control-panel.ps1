@@ -5,6 +5,18 @@ Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 $projectPath = $PSScriptRoot
 $runtimePath = Join-Path $projectPath 'runtime'
+function Read-SharedJson($filePath) {
+    $stream = $null
+    $reader = $null
+    try {
+        $shareMode = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete
+        $stream = [System.IO.File]::Open($filePath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, $shareMode)
+        $reader = New-Object System.IO.StreamReader($stream, [System.Text.Encoding]::UTF8, $true)
+        return ($reader.ReadToEnd() | ConvertFrom-Json -ErrorAction Stop)
+    } finally {
+        if ($reader) { $reader.Dispose() } elseif ($stream) { $stream.Dispose() }
+    }
+}
 $script:launcher = $null
 $script:notice = ''
 $script:homeworkLauncher = $null
@@ -80,7 +92,7 @@ function Get-Watcher {
 function Update-Panel {
     $homeworkWorker = Get-HomeworkWorker
     $homeworkState = $null
-    try { $homeworkState = [System.IO.File]::ReadAllText((Join-Path $runtimePath 'homework/status.json')) | ConvertFrom-Json } catch {}
+    try { $homeworkState = Read-SharedJson (Join-Path $runtimePath 'homework/status.json') } catch {}
     if ($script:homeworkLauncher) {
         $script:homeworkLauncher.Refresh()
         if ($script:homeworkLauncher.HasExited) {
@@ -111,7 +123,7 @@ function Update-Panel {
     $homeworkStop.Enabled = [bool]$homeworkWorker -and (-not $homeworkStopping)
     $watcher = Get-Watcher
     $state = $null
-    try { $state = [System.IO.File]::ReadAllText((Join-Path $runtimePath 'status.json')) | ConvertFrom-Json } catch {}
+    try { $state = Read-SharedJson (Join-Path $runtimePath 'status.json') } catch {}
     if ($script:launcher) {
         $script:launcher.Refresh()
         if ($script:launcher.HasExited) {

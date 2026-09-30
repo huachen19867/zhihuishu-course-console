@@ -57,4 +57,6 @@ control-panel.ps1负责界面；start-watcher.ps1、start-homework.ps1与launche
 
 runtime/status.json与runtime/homework/status.json分别记录状态；runtime/homework/results.json记录实际成绩。edge-control-profile保存登录资料。运行数据、个人配置、截图、归档和本地快捷方式不公开。
 
+Windows控制台以共享方式读取状态文件；照看程序遇到短暂文件占用会有限重试，避免控制台刷新状态时意外结束播放进程。
+
 npm test 在独立无界面Edge中检查弹题、播放、验证和模型适配，不操作个人课程或调用付费模型。控制台可用 -SmokeTest 检查构建和状态。网站改版与真实验证仍有适配风险。技术经验见 [TECHNICAL_LOG.md](TECHNICAL_LOG.md)。复用 [Playwright](https://github.com/microsoft/playwright) 和 [Edge DevTools Protocol](https://learn.microsoft.com/en-us/microsoft-edge/devtools/protocol/)，尚未覆盖所有课程页面。

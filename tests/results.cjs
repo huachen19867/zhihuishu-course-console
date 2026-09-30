@@ -1,7 +1,11 @@
 const assert=require('node:assert/strict');
-const {readScore}=require('../homework/result.cjs');
+const {readScore,readSubmittedScore}=require('../homework/result.cjs');
 assert.equal(readScore('你本次获得的成绩是\n18\n分'),18);
 assert.equal(readScore('本章测试你的得分为 80\n每日6点更新'),80);
 assert.equal(readScore('本章测试你的得分为 87.5'),87.5);
 assert.equal(readScore('总分数100\n完成率100%'),undefined);
+assert.equal(readScore('总分数 50\n恭喜你本章测试取得满分！'),50);
+assert.equal(readScore('恭喜你本章测试取得满分！'),undefined,'无总分时不能凭空当成100分');
+assert.equal(readSubmittedScore('作业\n100\n作业成绩\n第六章单元测试'),100);
+assert.equal(readSubmittedScore('题目数量10\n总分数100'),undefined);
 console.log('Result checks passed: both result page formats, decimals, no score before submission.');

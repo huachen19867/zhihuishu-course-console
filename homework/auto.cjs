@@ -3,7 +3,7 @@ const path=require('node:path');
 const {execFile}=require('node:child_process');
 const config=require('../config.cjs').loadConfig();
 const {generateJson}=require('../model.cjs');
-const {readScore}=require('./result.cjs');
+const {readScore,readSubmittedScore}=require('./result.cjs');
 const {promisify}=require('node:util');
 const {chromium}=require('playwright');
 const {extract,compat}=require('./run.cjs');
@@ -73,9 +73,18 @@ async function main(){
  await list.getByText(config.courseName,{exact:true}).first().waitFor({timeout:15000});
  const prior=path.join(runtime,'results.json');if(fs.existsSync(prior))completed=JSON.parse(fs.readFileSync(prior,'utf8'));
  for(const p of ctx.pages().filter(p=>p.url().includes('/dohomework/'))){
-   const score=readScore(await p.locator('body').innerText());
+   let score=readScore(await p.locator('body').innerText());
+   const unit=(await p.locator('h1').first().innerText()).trim();
+   if(score===undefined){
+     await list.getByText('已提交',{exact:true}).click();
+     try{
+       const title=list.getByText(unit,{exact:true}).first();
+       await title.waitFor({timeout:3000});
+       score=readSubmittedScore(await title.locator('xpath=ancestor::li[1]').innerText());
+     }catch(e){if(!e.message.includes('Timeout'))throw e;}
+     await list.getByText('未提交',{exact:true}).click();
+   }
    if(score!==undefined){
-     const unit=(await p.locator('h1').first().innerText()).trim();
      if(!unit.includes('单元测试'))throw Error('提交结果不属于单元测试');
      if(!completed.some(r=>r.unit===unit)){
        const saved=path.join(runtime,unit+'.json');
@@ -83,7 +92,9 @@ async function main(){
        completed.push({unit,score,questions,submittedAt:new Date().toISOString(),recovered:true});
        fs.writeFileSync(prior,JSON.stringify(completed,null,2));status('submitted',{unit,score});
      }
-     await p.getByText('返回作业考试',{exact:true}).click();await sleep(400);await p.close();
+     const back=p.getByText('返回作业考试',{exact:true});
+     if(await back.isVisible()){await back.click();await sleep(400);}
+     await p.close();
    }
  }
  await list.reload({waitUntil:'domcontentloaded'});await list.locator('.course_name').waitFor({timeout:15000});
@@ -130,7 +141,7 @@ async function main(){
    await page.getByText('提交作业',{exact:true}).click();
    await page.getByText('是否确认提交?提交后,批阅过的试卷不能再修改!',{exact:true}).waitFor({timeout:10000});
    await page.getByRole('button',{name:'确定',exact:true}).click();
-   await page.waitForFunction(()=>/你本次获得的成绩是|本章测试你的得分为/u.test(document.body?.innerText||''),null,{timeout:15000});
+   await page.waitForFunction(()=>/你本次获得的成绩是|本章测试你的得分为|恭喜你本章测试取得满分/u.test(document.body?.innerText||''),null,{timeout:15000});
    const body=await page.locator('body').innerText();
    const score=readScore(body);
    if(score===undefined)throw Error('未读到提交成绩，请核验页面');

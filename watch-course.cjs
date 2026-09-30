@@ -7,6 +7,7 @@ const {findCoursePage,sameCourseUrl,isVideoCourseUrl}=require('./course-page.cjs
 const {readCatalogueDom}=require('./catalogue.cjs');
 const { chromium } = require('playwright');
 const { resumePlayback,setPlaybackPreferences } = require('./playback.cjs');
+const {closeQuestion}=require('./close-question.cjs');
 const {waitForVerification,verificationVisible}=require('./verification.cjs');
 const base = __dirname;
 const run = path.join(base, 'runtime');
@@ -110,9 +111,10 @@ async function handleQuestion(q) {
     event('question-submitted');
   }
   if(!(await inspect()).question){event('question-closed');return;}
-  await page.locator('[data-course-watch="close"]:visible').first().click({ timeout: 8000 });
-  await sleep(1000);
-  if ((await inspect()).question) throw Error('答题弹窗未关闭，停止');
+  await closeQuestion({read:async()=>(await inspect()).question,
+    click:()=>page.locator('[data-course-watch="close"]:visible').first().click({timeout:2500}),
+    guard:waitVerification,stopped:()=>fs.existsSync(stopFile)});
+  if(fs.existsSync(stopFile))return;
   event('question-closed');
 }
 async function waitVerification(){

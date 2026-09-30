@@ -51,9 +51,9 @@ baseUrl 可替换为国内服务商提供的完整 API 根地址。密钥只放�
 
 ## 文件与验证
 
-control-panel.ps1负责界面；start-watcher.ps1、start-homework.ps1与launcher.cjs负责后台启动，open-edge.ps1负责独立浏览器。watch-course.cjs、playback.cjs、catalogue.cjs、course-page.cjs和detector.js负责视频、目录和课程发现；homework负责作业；config.cjs、read-config.ps1和model.cjs负责配置与模型。
+control-panel.ps1负责界面；start-watcher.ps1、start-homework.ps1与launcher.cjs负责后台启动，open-edge.ps1负责独立浏览器。watch-course.cjs、playback.cjs、close-question.cjs、catalogue.cjs、course-page.cjs和detector.js负责视频、答题和课程发现；homework负责作业；config.cjs、read-config.ps1和model.cjs负责配置与模型。
 
-视频支持经典页面、studywisdomh5及wisdom-mooc新版页面。新版目录自动展开章节并排除视频分组；完成以网站进度100%或finish-icon为准。倍速通过网站原生按钮的鼠标操作设置，再核验1.5倍速和静音。新版随堂题会先提交作答，再关闭弹窗。视频结束后仍缺完成标记时，每节最多进行一次普通刷新并正常补播；刷新前检查可见人机验证，不用于规避验证，仍未更新会明确停止。
+视频支持经典页面、studywisdomh5及wisdom-mooc新版页面。新版目录自动展开章节并排除视频分组；完成以网站进度100%或finish-icon为准。倍速通过网站原生按钮的鼠标操作设置，再核验1.5倍速和静音。新版随堂题会先提交作答，再关闭弹窗。若提交后网站重渲染弹窗，程序会复查题目状态；同一道题仍显示时最多尝试关闭三次，发现题目变化则交回常规流程。只自动处理精确匹配的已知播放器提示，其他未知提示和验证仍会报告。视频结束后仍缺完成标记时，每节最多进行一次普通刷新并正常补播；刷新前检查可见人机验证，不用于规避验证，仍未更新会明确停止。
 
 runtime/status.json与runtime/homework/status.json分别记录状态；runtime/homework/results.json记录实际成绩。edge-control-profile保存登录资料。运行数据、个人配置、截图、归档和本地快捷方式不公开。
 

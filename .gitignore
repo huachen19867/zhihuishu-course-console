@@ -1,0 +1,13 @@
+edge-control-profile/
+runtime/
+node_modules/
+config.local.json
+*.local.json
+.env
+.env.*
+!.env.example
+archive/
+reference/
+*.lnk
+*.log
+*.png

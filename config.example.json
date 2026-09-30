@@ -1,0 +1,14 @@
+{
+  "courseUrl": "",
+  "courseName": "",
+  "cdpUrl": "http://127.0.0.1:9222",
+  "model": {
+    "provider": "agent-file",
+    "name": "",
+    "reasoningEffort": "low",
+    "cliPath": "",
+    "baseUrl": "",
+    "apiKeyEnv": "OPENAI_API_KEY",
+    "timeoutMs": 300000
+  }
+}

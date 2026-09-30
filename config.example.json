@@ -2,6 +2,7 @@
   "courseUrl": "",
   "courseName": "",
   "cdpUrl": "http://127.0.0.1:9222",
+  "lowConfidenceAction": "best-effort",
   "model": {
     "provider": "agent-file",
     "name": "",

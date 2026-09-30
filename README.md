@@ -15,6 +15,8 @@ Copy-Item config.example.json config.local.json
 
 编辑本地配置的 courseName 与 courseUrl，填写本人课程名称和完整视频页面链接。cdpUrl 默认 http://127.0.0.1:9222；启动器读取其中的端口。可用 COURSE_CONFIG 环境变量指定配置文件绝对路径。本地配置已忽略。
 
+其他课程也可使用：修改 courseName、courseUrl，打开同一Edge中的目标课程。模型提示会使用配置的课程名称，并非固定某一学科。当前适配的是智慧树已支持的视频DOM与标题含“单元测试”的选择/判断作业；新页面、填空、简答等题型需另行适配，不能保证所有课程直接可用。
+
 双击 `启动与停止/控制台.cmd`，或运行 `powershell -NoProfile -STA -ExecutionPolicy Bypass -File .\control-panel.ps1`。视频点击“启动课程观看”后本人登录独立 Edge 并进入课程；“停止课程观看”停止自动视频操作。单元作业需先在该 Edge 打开课程的作业列表，再点启动单元测试。单独打开 Edge 可运行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\open-edge.ps1`。
 
 保持电脑唤醒和浏览器打开。关闭控制台不会停止后台；停止自动操作不会关闭浏览器，也不保证暂停视频。停止按钮需等待当前操作或模型请求结束。推荐始终向用户展示控制台。
@@ -41,7 +43,7 @@ baseUrl 可替换为国内服务商提供的完整 API 根地址。密钥只放�
 
 `codex-cli` 可选，使用本人登录的 [Codex CLI](https://github.com/openai/codex)。安装并 codex login 后，程序按 cliPath、CODEX_CLI_PATH、PATH 顺序寻找 CLI。name 留空使用默认模型，或填写账号实际可用的模型名称；reasoningEffort 默认 low，不支持时设为空字符串。默认使用官方 provider，baseUrl 留空；确需独立 Responses provider 时可填写根地址，这一模式仍使用 Codex 登录认证。CLI 调用忽略用户自定义配置，不修改全局配置，不固定个人版本目录。
 
-每份作业集中请求一次，播放和点击由本地程序完成，已有弹题答案缓存复用。作业置信度低于0.8暂停；模型自报置信度不能保证正确率。仅处理标题包含单元测试的作业，不操作期末或线下考试。切换课程前应保留旧runtime备份并建立干净runtime，避免混入旧状态和成绩。
+每份作业集中请求一次，播放和点击由本地程序完成，已有弹题答案缓存复用。`lowConfidenceAction` 默认 `best-effort`：置信度低于0.8时采用模型给出的最可能答案继续，并记录低置信度题号；需要人工核对时可设为 `stop`。模型自报置信度不能保证正确率。题目缺失、答案不匹配等数据或页面错误仍会停止。仅处理标题包含单元测试的作业，不操作期末或线下考试。切换课程前应保留旧runtime备份并建立干净runtime，避免混入旧状态和成绩。
 
 ## 人机验证与故障
 

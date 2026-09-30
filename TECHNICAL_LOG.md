@@ -1,5 +1,11 @@
 # 技术日志
 
+## 2026-09-30：最可能答案与跨课程成绩格式
+
+用户要求低置信度继续，新增lowConfidenceAction，默认best-effort：按模型已有的最可能答案继续，保留原confidence并记录不确定题号。stop选项保留给需要人工复核的用户；缓存与新答案均应用同一策略。置信度字段无效、题目缺失、答案无法匹配等异常仍停止，不伪造确定性。
+
+课程由courseName/courseUrl配置，提示不限学科。真实跨课程页面结果从“你本次获得的成绩是”变为“本章测试你的得分为”，新增homework/result.cjs统一识别，启动时可恢复已提交结果避免重复提交。tests/results.cjs验证两种格式、小数及未提交页不会误读总分。实际已验证低置信度缓存继续、提交新格式成绩并切到后续单元；成绩保存在私人runtime，不公开。当前仅适配选择/判断单元作业及已支持的视频DOM。
+
 ## 2026-09-30：隐藏验证码误判与控制台命名
 
 站点预加载验证码iframe，父容器opacity为0，top为-1000000px。旧检测把有尺寸的隐藏iframe误判为真实验证，导致无限等待。改为检查祖先display/visibility/opacity和视口交集，进入子frame前逐层确认frameElement可见。实际作业列表修复后verificationVisible=false，能正常进入单元分析。隔离测试新增屏幕外透明iframe及其子frame、透明父容器不误判，原真实可见验证/人工消除/停止测试保留，npm test全通过。

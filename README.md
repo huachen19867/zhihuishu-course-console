@@ -15,7 +15,7 @@ Copy-Item config.example.json config.local.json
 
 编辑本地配置的 courseName 与 courseUrl，填写本人课程名称和完整视频页面链接。cdpUrl 默认 http://127.0.0.1:9222；启动器读取其中的端口。可用 COURSE_CONFIG 环境变量指定配置文件绝对路径。本地配置已忽略。
 
-双击 `启动与停止/控制台.cmd`，或运行 `powershell -NoProfile -STA -ExecutionPolicy Bypass -File .\control-panel.ps1`。视频点击启动后本人登录独立 Edge 并进入课程。单元作业需先在该 Edge 打开课程的作业列表，再点启动单元测试。单独打开 Edge 可运行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\open-edge.ps1`。
+双击 `启动与停止/控制台.cmd`，或运行 `powershell -NoProfile -STA -ExecutionPolicy Bypass -File .\control-panel.ps1`。视频点击“启动课程观看”后本人登录独立 Edge 并进入课程；“停止课程观看”停止自动视频操作。单元作业需先在该 Edge 打开课程的作业列表，再点启动单元测试。单独打开 Edge 可运行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\open-edge.ps1`。
 
 保持电脑唤醒和浏览器打开。关闭控制台不会停止后台；停止自动操作不会关闭浏览器，也不保证暂停视频。停止按钮需等待当前操作或模型请求结束。推荐始终向用户展示控制台。
 

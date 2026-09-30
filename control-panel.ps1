@@ -28,12 +28,12 @@ $details = New-Object System.Windows.Forms.Label
 $details.SetBounds(24,110,595,70)
 $form.Controls.Add($details)
 $startButton = New-Object System.Windows.Forms.Button
-$startButton.Text = '启动'
+$startButton.Text = '启动课程观看'
 $startButton.SetBounds(24,185,180,46)
 $startButton.BackColor = [System.Drawing.Color]::FromArgb(220,245,230)
 $form.Controls.Add($startButton)
 $stopButton = New-Object System.Windows.Forms.Button
-$stopButton.Text = '停止'
+$stopButton.Text = '停止课程观看'
 $stopButton.SetBounds(220,185,180,46)
 $form.Controls.Add($stopButton)
 $logBox = New-Object System.Windows.Forms.TextBox
@@ -84,7 +84,10 @@ function Update-Panel {
     if ($script:homeworkLauncher) {
         $script:homeworkLauncher.Refresh()
         if ($script:homeworkLauncher.HasExited) {
-            if ($script:homeworkLauncher.ExitCode -ne 0) { $script:notice = '单元测试启动失败，请先在连接的 Edge 中打开单元测试列表。' }
+            if ($script:homeworkLauncher.ExitCode -ne 0) {
+                $script:notice = '单元测试启动失败：'
+                try { $script:notice += [System.IO.File]::ReadAllText((Join-Path $runtimePath 'homework-launch.stderr.log')).Trim() } catch { $script:notice += '请查看启动日志。' }
+            } else { $script:notice = '' }
             $script:homeworkLauncher.Dispose(); $script:homeworkLauncher=$null
         }
     }
@@ -97,7 +100,10 @@ function Update-Panel {
     } elseif ($script:homeworkLauncher) { $homeworkText = '单元测试：正在启动' }
     elseif ($homeworkState.stage -eq 'complete') { $homeworkText = '单元测试：全部未提交单元作业已完成' }
     elseif ($homeworkState.stage -eq 'error') { $homeworkText = '单元测试已停止：'+$homeworkState.message.Split("`n")[0].Substring(0,[Math]::Min(150,$homeworkState.message.Split("`n")[0].Length)) }
-    elseif ($homeworkState.stage -eq 'stopped') { $homeworkText = '单元测试：已停止' }
+    elseif ($homeworkState.stage -eq 'stopped') {
+        $homeworkText = '单元测试：已停止'
+        if ($homeworkState.message) { $homeworkText += '；' + $homeworkState.message.Split("`n")[0] }
+    }
     if ($homeworkState.completed) { $homeworkText += "`r`n已提交：" + $homeworkState.completed.Count + ' 份；最新：' + $homeworkState.completed[-1].unit + ' / ' + $homeworkState.completed[-1].score + ' 分' }
     $homeworkLabel.Text = $homeworkText
     $homeworkStart.Enabled = (-not $homeworkWorker) -and (-not $script:homeworkLauncher)
@@ -202,7 +208,7 @@ $timer.Interval = 2000
 $timer.Add_Tick({ try { Update-Panel } catch { $status.Text='状态读取失败：'+$_.Exception.Message } })
 Update-Panel
 if ($SmokeTest) {
-    @{status=$status.Text;details=$details.Text;startEnabled=$startButton.Enabled;stopEnabled=$stopButton.Enabled;homework=$homeworkLabel.Text;homeworkStartEnabled=$homeworkStart.Enabled;homeworkStopEnabled=$homeworkStop.Enabled} | ConvertTo-Json
+    @{status=$status.Text;details=$details.Text;startText=$startButton.Text;stopText=$stopButton.Text;startEnabled=$startButton.Enabled;stopEnabled=$stopButton.Enabled;homework=$homeworkLabel.Text;homeworkStartEnabled=$homeworkStart.Enabled;homeworkStopEnabled=$homeworkStop.Enabled} | ConvertTo-Json
     $timer.Dispose(); $form.Dispose(); exit 0
 }
 $timer.Start()

@@ -22,6 +22,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function showStatus(message, failed=false) {
   if (!page || page.isClosed()) return;
   await page.evaluate(({message,failed}) => {
+    if(!document.body)return;
     let el=document.getElementById('course-watch-status');
     if(!el){el=document.createElement('div');el.id='course-watch-status';document.body.appendChild(el);}
     el.textContent=message;

@@ -54,6 +54,9 @@ async function main(){
  const ctx=browser.contexts()[0];
  let list=ctx.pages().find(p=>p.url().includes('onlineexamh5new.zhihuishu.com/stuExamWeb.html#/webExamList?'));
  if(!list)throw Error('请先打开配置课程的单元测试列表');
+ await list.locator('.course_name').waitFor({timeout:15000});
+ const actualCourse=(await list.locator('.course_name').innerText()).trim();
+ if(actualCourse!==config.courseName)throw Error('课程配置不匹配：当前页面为“'+actualCourse+'”，配置为“'+config.courseName+'”。请修改 config.local.json 的 courseName 后重启。');
  await ctx.addInitScript(compat);
  await waitVerification(list);
  await list.reload({waitUntil:'domcontentloaded'});
@@ -114,4 +117,4 @@ async function main(){
  }
  throw Error('作业列表异常，超过预期单元数量');
 }
-main().catch(e=>{status('error',{message:e.stderr||e.message});process.exitCode=1}).finally(async()=>{if(browser)await browser.close()});
+main().catch(e=>{status(fs.existsSync(stopFile)?'stopped':'error',{message:e.stderr||e.message});process.exitCode=fs.existsSync(stopFile)?0:1}).finally(async()=>{if(browser)await browser.close()});

@@ -1,5 +1,13 @@
 # 技术日志
 
+## 2026-09-30：隐藏验证码误判与控制台命名
+
+站点预加载验证码iframe，父容器opacity为0，top为-1000000px。旧检测把有尺寸的隐藏iframe误判为真实验证，导致无限等待。改为检查祖先display/visibility/opacity和视口交集，进入子frame前逐层确认frameElement可见。实际作业列表修复后verificationVisible=false，能正常进入单元分析。隔离测试新增屏幕外透明iframe及其子frame、透明父容器不误判，原真实可见验证/人工消除/停止测试保留，npm test全通过。
+
+作业启动先核验.course_name，配置不符明确报告页面课程和配置课程，避免停在验证或等待标题而无说明。启动失败显示实际日志，成功清除旧错误。视频状态提示在document.body尚未加载时跳过，修复appendChild空引用。课程观看使用同一验证检测，已有播放控件回退及时间推进/停滞测试通过；尚不能保证所有站点页面没有未知问题。
+
+控制台按钮改为“启动课程观看”和“停止课程观看”，SmokeTest增加按钮文字核验。课程切换时个人旧记录归档，未公开个人配置或成绩。
+
 ## 2026-09-30 公开版整理
 
 复用Playwright 1.63.0、Windows WinForms、Edge CDP及Codex CLI，没有新增扩展或网页服务。参考 https://github.com/microsoft/playwright 、https://github.com/openai/codex 、https://learn.microsoft.com/en-us/microsoft-edge/devtools/protocol/ 。原有个人技术日志与说明保留在忽略的archive目录。课程ID、运行数据、成绩、登录资料不公开。

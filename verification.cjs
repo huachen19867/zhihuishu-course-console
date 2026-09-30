@@ -1,9 +1,24 @@
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function elementVisible(e){
+  for(let n=e;n;n=n.parentElement){const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||Number(s.opacity)===0)return false;}
+  const r=e.getBoundingClientRect();
+  return r.width>0&&r.height>0&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth;
+}
 async function verificationVisible(page){
   for(const frame of page.frames()){
     try{
+      let ancestor=frame,shown=true;
+      while(ancestor.parentFrame()){
+        const el=await ancestor.frameElement();
+        try{if(!await el.evaluate(elementVisible)){shown=false;break;}}finally{await el.dispose();}
+        ancestor=ancestor.parentFrame();
+      }
+      if(!shown)continue;
       if(await frame.evaluate(()=>{
-        const visible=e=>!!(e.getClientRects().length)&&getComputedStyle(e).visibility!=='hidden'&&getComputedStyle(e).display!=='none';
+        const visible=e=>{
+          for(let n=e;n;n=n.parentElement){const s=getComputedStyle(n);if(s.display==='none'||s.visibility==='hidden'||s.visibility==='collapse'||Number(s.opacity)===0)return false;}
+          const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth;
+        };
         const containers=document.querySelectorAll('[role="dialog"], [class*="captcha"], [id*="captcha"], [class*="geetest"], [id*="geetest"], [class*="yidun"], [class*="verify"]');
         const challenge=/人机验证|请完成.{0,6}验证|拖动.{0,12}(滑块|拼图)|按顺序.{0,8}点击|安全验证|点击.{0,8}完成验证/;
         return [...containers].some(e=>visible(e)&&challenge.test(e.innerText||'')) ||

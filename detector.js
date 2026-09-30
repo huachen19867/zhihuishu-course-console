@@ -5,6 +5,10 @@
   const visible = node => {
     if (!node || !node.isConnected) return false;
     const style = getComputedStyle(node), box = node.getBoundingClientRect();
+    for(let parent=node.parentElement;parent;parent=parent.parentElement){
+      const s=getComputedStyle(parent);
+      if(s.display==='none'||s.visibility==='hidden'||Number(s.opacity)===0)return false;
+    }
     return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) !== 0 && box.width > 0 && box.height > 0;
   };
   function leaves(root) {
@@ -78,6 +82,11 @@
   }
   function answerFeedback(modal) {
     return visible(modal) && /正确答案\s*[:：]\s*[A-H](?=\s|$|[^A-Za-z])/u.test(modal.innerText || '');
+  }
+  function playbackNotice(){
+    const modal=[...document.querySelectorAll('.ai-notice-dialog')].find(e=>visible(e)&&e.querySelector('.text')?.textContent?.trim()==='videoConfigTip01');
+    const button=modal?.querySelector('.btn');
+    return button&&visible(button)&&button.textContent.trim()==='好的'?button:null;
   }
   function unansweredPrompt() {
     if (!document.body) return null;
@@ -168,5 +177,5 @@
     if (!closeFound) return '找到题目和选项，但未识别到关闭按钮';
     return '找到弹窗结构，但题干提取失败';
   }
-  window.__wisdomJevDetector = { read, diagnose, visible, findClose, isSelected, clickPoint, answerFeedback, unansweredPrompt };
+  window.__wisdomJevDetector = { read, diagnose, visible, findClose, isSelected, clickPoint, answerFeedback, unansweredPrompt,playbackNotice };
 })();

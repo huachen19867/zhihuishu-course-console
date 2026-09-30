@@ -26,6 +26,13 @@ const {chromium}=require('playwright');
     await page.evaluate(()=>{document.querySelector('.ai-test-question-wrapper').className='ai-class-exercise-dialog';const card=document.querySelector('.ques-card-box');card.className='item';const list=document.createElement('div');list.className='ques-list';card.replaceWith(list);list.appendChild(card);card.querySelector('.question').className='question-info';document.querySelector('.close-box').outerHTML='<div class="ai-class-exercise-dialog-header"><img class="header-icon" style="width:24px;height:24px"></div>';document.querySelector('.submit-btn').outerHTML='<div class="dialog-footer"><button>提交</button></div>';});
     const mooc=await page.evaluate(()=>{const d=window.__wisdomJevDetector,q=d.read();return {question:q.question,submit:!!q.submit,close:!!d.findClose(q.modal)};});
     assert.deepEqual(mooc,{question:'新题内容',submit:true,close:true});
+    await page.setContent('<div class="ai-notice-dialog"><div class="text">videoConfigTip01</div><div class="btn">好的</div></div>');
+    assert.equal(await page.evaluate(()=>!!window.__wisdomJevDetector.playbackNotice()),true);
+    await page.locator('.text').evaluate(e=>e.textContent='未知提示');
+    assert.equal(await page.evaluate(()=>!!window.__wisdomJevDetector.playbackNotice()),false);
+    await page.locator('.text').evaluate(e=>e.textContent='videoConfigTip01');
+    await page.locator('.ai-notice-dialog').evaluate(e=>{const wrapper=document.createElement('div');wrapper.style.opacity='0';e.replaceWith(wrapper);wrapper.appendChild(e);});
+    assert.equal(await page.evaluate(()=>!!window.__wisdomJevDetector.playbackNotice()),false);
     console.log('Question checks passed: classic and modern quizzes, selection markers and explicit submit.');
   }finally{await browser.close();}
 })().catch(e=>{console.error(e.message);process.exitCode=1});

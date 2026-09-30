@@ -7,7 +7,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
  const mode=process.argv[2],config=loadConfig();
  if(!['video','homework'].includes(mode))throw Error('Expected video or homework');
- if(!config.courseName||(mode==='video'&&!config.courseUrl))throw Error('Configure courseName and courseUrl in config.local.json first.');
+ if(!config.courseName)throw Error('请在 config.local.json 配置 courseName。');
  const runtime=path.join(__dirname,'runtime',mode==='homework'?'homework':'');
  fs.mkdirSync(runtime,{recursive:true});
  const pidFile=path.join(runtime,mode==='homework'?'worker.pid':'watcher.pid');

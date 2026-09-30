@@ -84,6 +84,7 @@ function Update-Panel {
     if ($script:homeworkLauncher) {
         $script:homeworkLauncher.Refresh()
         if ($script:homeworkLauncher.HasExited) {
+            $script:homeworkLauncher.WaitForExit()
             if ($script:homeworkLauncher.ExitCode -ne 0) {
                 $script:notice = '单元测试启动失败：'
                 try { $script:notice += [System.IO.File]::ReadAllText((Join-Path $runtimePath 'homework-launch.stderr.log')).Trim() } catch { $script:notice += '请查看启动日志。' }
@@ -114,10 +115,11 @@ function Update-Panel {
     if ($script:launcher) {
         $script:launcher.Refresh()
         if ($script:launcher.HasExited) {
+            $script:launcher.WaitForExit()
             if ($script:launcher.ExitCode -ne 0) {
-                $script:notice = '启动失败，请查看下方提示。'
-                try { $script:notice += "`r`n" + [System.IO.File]::ReadAllText((Join-Path $runtimePath 'console-launch.stderr.log')) } catch {}
-            }
+                $script:notice = '启动课程观看失败：'
+                try { $script:notice += [System.IO.File]::ReadAllText((Join-Path $runtimePath 'console-launch.stderr.log')).Trim() } catch { $script:notice += '请查看启动日志。' }
+            } else { $script:notice = '' }
             $script:launcher.Dispose()
             $script:launcher = $null
         }
@@ -128,7 +130,7 @@ function Update-Panel {
         $status.ForeColor = [System.Drawing.Color]::DarkOrange
     } elseif ($watcher) {
         $status.Text = '运行中'
-        if ($state.waitingForCourse) { $status.Text = '等待你在 Edge 中登录并进入课程' }
+        if ($state.waitingForCourse) { $status.Text = '等待登录并打开课程：' + $state.courseName }
         elseif ($state.waitingVerification) { $status.Text = '等待你手动完成人机验证；完成后自动继续' }
         elseif ($state.question) { $status.Text = '正在处理弹题' }
         $status.ForeColor = [System.Drawing.Color]::ForestGreen

@@ -3,6 +3,7 @@ const path = require('node:path');
 const {loadConfig}=require('./config.cjs');
 const {generateJson}=require('./model.cjs');
 const config=loadConfig();
+const {findCoursePage,sameCourseUrl,isVideoCourseUrl}=require('./course-page.cjs');
 const { chromium } = require('playwright');
 const { resumePlayback } = require('./playback.cjs');
 const {waitForVerification,verificationVisible}=require('./verification.cjs');
@@ -17,7 +18,7 @@ const solver = path.join(run, 'solver');
 fs.mkdirSync(solver, { recursive: true });
 let cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'utf8')) : {};
 let browser, page, lastTitle, stalledSince, lastTime = -1, previousEvent;
-const courseUrl = config.courseUrl;
+let courseUrl = config.courseUrl;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function showStatus(message, failed=false) {
   if (!page || page.isClosed()) return;
@@ -35,7 +36,7 @@ function event(kind, info = {}) {
   console.log(JSON.stringify(data));
 }
 async function inspect() {
-  if (!page || page.isClosed() || page.url() !== courseUrl) throw Error('课程窗口已关闭或离开指定课程，停止操作');
+  if (!page || page.isClosed() || !sameCourseUrl(page.url(),courseUrl)) throw Error('课程窗口已关闭或离开指定课程，停止操作');
   await page.evaluate(detector);
   return page.evaluate(() => {
     const d = window.__wisdomJevDetector;
@@ -121,9 +122,11 @@ async function main() {
     console.log(JSON.stringify({ verifiedAnswer:await solve(q, true) }));
     return;
   }
-  if(!config.courseUrl||!config.courseName)throw Error('请在 config.local.json 配置 courseUrl 和 courseName');
+  if(!config.courseName)throw Error('请在 config.local.json 配置 courseName');
+  if(config.courseUrl&&!isVideoCourseUrl(config.courseUrl))throw Error('配置的视频链接不是已支持的智慧树课程页面');
   browser = await chromium.connectOverCDP(config.cdpUrl);
-  page = browser.contexts().flatMap(c => c.pages()).find(p => p.url() === courseUrl);
+  page = await findCoursePage(browser,config);
+  if(page)courseUrl=page.url();
   if (process.argv.includes('--inspect')) {
     if (!page) throw Error('找不到指定智慧树课程页');
     console.log(JSON.stringify(await inspect(), null, 2)); return;
@@ -138,11 +141,12 @@ async function main() {
   if (!page && process.argv.includes('--wait-for-course')) {
     const waitStart=Date.now();
     while(!page && !fs.existsSync(stopFile) && Date.now()-waitStart<600000){
-      fs.writeFileSync(stateFile,JSON.stringify({running:true,waitingForCourse:true,updated:new Date().toISOString()}));
+      fs.writeFileSync(stateFile,JSON.stringify({running:true,waitingForCourse:true,courseName:config.courseName,message:'请在独立Edge登录并打开课程：'+config.courseName,updated:new Date().toISOString()}));
       const loginPage=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url().includes('zhihuishu.com'));
       if(loginPage){page=loginPage;await showStatus('等待你登录并进入配置的课程');page=undefined;}
       await sleep(3000);
-      page=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url()===courseUrl);
+      page=await findCoursePage(browser,config);
+      if(page)courseUrl=page.url();
     }
     if(fs.existsSync(stopFile)){event('stopped');fs.writeFileSync(stateFile,JSON.stringify({running:false,stopped:true}));return;}
   }
@@ -150,6 +154,7 @@ async function main() {
   while (!fs.existsSync(stopFile)) {
     await waitVerification();
     const state = await inspect();
+    if(!state.rows.length)throw Error('未识别到课程视频目录；页面可能尚未加载或需要适配，不会将其误报为完成');
     const current = state.rows.find(r => r.current);
     const pending = state.rows.filter(r => !r.done);
     fs.writeFileSync(stateFile, JSON.stringify({ ...state, running: true, pending: pending.length, updated: new Date().toISOString() }, null, 2));

@@ -5,7 +5,7 @@
   "description": "本机 Edge 课程照看程序",
   "scripts": {
     "start": "node watch-course.cjs",
-    "test": "node tests/questions.cjs && node tests/playback.cjs && node tests/verification.cjs && node tests/model.cjs && node tests/results.cjs"
+    "test": "node tests/questions.cjs && node tests/playback.cjs && node tests/verification.cjs && node tests/model.cjs && node tests/results.cjs && node tests/course-page.cjs"
   },
   "dependencies": { "playwright": "1.63.0" }
 }

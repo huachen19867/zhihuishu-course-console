@@ -13,7 +13,7 @@ npm ci --ignore-scripts --no-audit --no-fund
 Copy-Item config.example.json config.local.json
 ```
 
-编辑本地配置的 courseName 与 courseUrl，填写本人课程名称和完整视频页面链接。cdpUrl 默认 http://127.0.0.1:9222；启动器读取其中的端口。可用 COURSE_CONFIG 环境变量指定配置文件绝对路径。本地配置已忽略。
+编辑本地配置的 courseName，填写本人课程名称。courseUrl 可填写完整视频链接，让独立Edge启动时直接进入课程；也可留空，程序按课程名称识别本人已打开的智慧树视频页。缺少链接不会直接退出，而是显示等待登录或打开课程。cdpUrl 默认 http://127.0.0.1:9222；启动器读取其中的端口。可用 COURSE_CONFIG 环境变量指定配置文件绝对路径。本地配置已忽略。
 
 其他课程也可使用：修改 courseName、courseUrl，打开同一Edge中的目标课程。模型提示会使用配置的课程名称，并非固定某一学科。当前适配的是智慧树已支持的视频DOM与标题含“单元测试”的选择/判断作业；新页面、填空、简答等题型需另行适配，不能保证所有课程直接可用。
 

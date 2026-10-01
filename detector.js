@@ -127,17 +127,22 @@
     const modern=[...document.querySelectorAll('.ai-test-question-wrapper, .ai-class-exercise-dialog')].find(visible);
     if(modern){
       const cards=[...modern.querySelectorAll('.ques-card-box, .ques-list .item')].filter(visible);
-      if(cards.length!==1)return null;
-      const card=cards[0],question=card.querySelector('.question, .question-info')?.textContent?.trim(),raw=card.querySelector('.type')?.textContent||'';
-      const opts=[...card.querySelectorAll('.option')].map(target=>({
-        letter:target.querySelector('.class-question-select')?.textContent?.trim(),
-        text:target.querySelector('.answer')?.textContent?.trim(),target,radio:null,
-      }));
-      if(!question||!questionRE.test(raw)||opts.length<2||opts.some(o=>!o.text||!/^([A-H])$/u.test(o.letter)))return null;
+      if(!cards.length||cards.length>6)return null;
+      const questions=cards.map(card=>{
+        const question=card.querySelector('.question, .question-info')?.textContent?.trim(),raw=card.querySelector('.type')?.textContent||'';
+        const options=[...card.querySelectorAll('.option')].map(target=>({
+          letter:target.querySelector('.class-question-select')?.textContent?.trim(),
+          text:target.querySelector('.answer')?.textContent?.trim(),target,radio:null,
+        }));
+        if(!question||!questionRE.test(raw)||options.length<2||options.some(o=>!o.text||!/^([A-H])$/u.test(o.letter)))return null;
+        return {question,multiple:/多选题/u.test(raw),options,fingerprint:JSON.stringify([question,...options.map(o=>[o.letter,o.text])])};
+      });
+      if(questions.some(item=>!item))return null;
       const submit=modern.querySelector('.submit-btn, .dialog-footer button:not(.is-finish)');
-      return {modal:modern,question,multiple:/多选题/u.test(raw),options:opts,
+      const fingerprint=JSON.stringify(questions.map(item=>item.fingerprint));
+      return {modal:modern,questions,...(questions.length===1?questions[0]:{}),batch:questions.length>1,
         submit:submit&&visible(submit)&&/提交/u.test(submit.innerText)?submit:null,
-        fingerprint:JSON.stringify([question,...opts.map(o=>[o.letter,o.text])]),
+        fingerprint,
       };
     }
     const modal = findModal();

@@ -61,3 +61,6 @@
 
 ## 2026-10-01 控制台轮询锁住watcher状态文件
 运行日志显示课程正常播放、答题提交并恢复后，Node watcher在更新runtime/status.json时收到Windows EBUSY，随即退出；控制台使用File.ReadAllText默认FileShare.Read，与写入冲突，导致错误状态也无法落盘。新增WriteStatus对EBUSY/EPERM/EACCES以100ms间隔有限重试25次；WinForms通过Read-SharedJson以FileShare.ReadWrite与FileShare.Delete共享读取，覆盖视频与作业状态。精确重启旧控制台实例与watcher后，页面继续运行，已观察到播放状态更新和后续弹题请求，rate=1.5、muted=true。未做整套测试以减少额度。
+
+## 2026-10-01 单弹窗含两道随堂题导致误报
+实际弹题对话框包含两道多选题并共用提交按钮，识别器此前仅接收单题，误归入未知弹窗而停止。已扩展为最多识别6道单选/多选/判断题，一次模型结构化请求给出各题答案；按卡片隔离点击并逐题核验，随后统一提交，再按fingerprint管理关闭重试。未知题数/结构不提交。页面现场已提交两道题、关闭弹窗并恢复播放，当前课程时间持续推进，1.5倍速静音。代码语法检查通过；按低额度要求未跑全套测试。

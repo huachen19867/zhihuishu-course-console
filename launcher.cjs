@@ -7,11 +7,11 @@ const {findCurrentCoursePage,isVideoCourseUrl}=require('./course-page.cjs');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
  const mode=process.argv[2],config=loadConfig();
- if(!['video','homework'].includes(mode))throw Error('Expected video or homework');
+ if(!['video','homework','portal'].includes(mode))throw Error('Expected video, homework or portal');
  const runtime=path.join(__dirname,'runtime',mode==='homework'?'homework':'');
  fs.mkdirSync(runtime,{recursive:true});
  const pidFile=path.join(runtime,mode==='homework'?'worker.pid':'watcher.pid');
- if(fs.existsSync(pidFile)){
+ if(mode!=='portal'&&fs.existsSync(pidFile)){
   const pid=Number(fs.readFileSync(pidFile,'utf8'));
   if(Number.isInteger(pid)&&pid>0){try{process.kill(pid,0);console.log('Worker already running');return}catch(e){if(e.code!=='ESRCH')throw e}}
  }
@@ -19,10 +19,22 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const ready=async()=>{const r=await fetch(endpoint+'/json/version',{signal:AbortSignal.timeout(2000)});if(!r.ok)throw Error('CDP HTTP '+r.status);await r.json()};
  try{await ready()}catch(e){
   if(mode==='homework')throw Error('Open the connected Edge and unit test list first.');
-  await promisify(execFile)('powershell.exe',['-NoProfile','-File',path.join(__dirname,'open-edge.ps1')],{windowsHide:true});
+  await promisify(execFile)('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(__dirname,'open-edge.ps1')],{windowsHide:true});
   let connected=false;
   for(let i=0;i<15;i++){await sleep(1000);try{await ready();connected=true;break}catch{}}
   if(!connected)throw Error('Edge connection failed');
+ }
+ if(mode==='portal'){
+  const browser=await require('playwright').chromium.connectOverCDP(config.cdpUrl);
+  try{
+   const home='https://www.zhihuishu.com/';
+   let tab=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url()===home);
+   if(!tab){tab=await browser.contexts()[0].newPage();await tab.goto(home,{waitUntil:'domcontentloaded',timeout:30000});}
+   const session=await tab.context().newCDPSession(tab);
+   try{const {windowId,bounds}=await session.send('Browser.getWindowForTarget');if(bounds.windowState==='minimized')await session.send('Browser.setWindowBounds',{windowId,bounds:{windowState:'normal'}});}finally{await session.detach();}
+   await tab.bringToFront();console.log('智慧树已打开，请登录并选择需要学习的课程。');
+  }finally{await browser.close();}
+  return;
  }
  if(mode==='homework'){
   const r=await fetch(endpoint+'/json/list',{signal:AbortSignal.timeout(3000)});

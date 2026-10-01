@@ -13,7 +13,7 @@ npm ci --ignore-scripts --no-audit --no-fund
 Copy-Item config.example.json config.local.json
 ```
 
-启动课程观看会选择可接管 Edge 当前窗口显示的课程标签页，不按旧配置链接另开课程。选择后锁定本次课程；更换课程请停止后，在 Edge 切到目标课程再启动。Windows 使用 edge-window-order.ps1 读取窗口顺序、标题和位置，避免网页修改焦点状态导致选错。无法确定时明确提示，不猜测。courseUrl 仅作为独立 Edge 首次打开时的入口；cdpUrl 默认 http://127.0.0.1:9222，可用 COURSE_CONFIG 指定本地配置文件。
+启动课程观看会选择可接管 Edge 当前窗口显示的课程标签页，不按旧配置链接另开课程。选择后锁定本次课程；更换课程请停止后，在 Edge 切到目标课程再启动。Windows 使用 edge-window-order.ps1 读取窗口顺序、标题和位置，避免网页修改焦点状态导致选错。无法确定时明确提示，不猜测。独立 Edge 默认打开智慧树首页，不使用旧 courseUrl 自动进入课程；cdpUrl 默认 http://127.0.0.1:9222，可用 COURSE_CONFIG 指定本地配置文件。
 
 其他课程也可使用：在同一可接管 Edge 中打开目标课程再启动。当前适配的是智慧树已支持的视频DOM与标题含“单元测试”的选择/判断作业；新页面、填空、简答等题型需另行适配，不能保证所有课程直接可用。
 
@@ -60,3 +60,5 @@ runtime/status.json与runtime/homework/status.json分别记录状态；runtime/h
 Windows控制台以共享方式读取状态文件；照看程序遇到短暂文件占用会有限重试，避免控制台刷新状态时意外结束播放进程。
 
 npm test 在独立无界面Edge中检查弹题、播放、验证和模型适配，不操作个人课程或调用付费模型。控制台可用 -SmokeTest 检查构建和状态。网站改版与真实验证仍有适配风险。技术经验见 [TECHNICAL_LOG.md](TECHNICAL_LOG.md)。复用 [Playwright](https://github.com/microsoft/playwright) 和 [Edge DevTools Protocol](https://learn.microsoft.com/en-us/microsoft-edge/devtools/protocol/)，尚未覆盖所有课程页面。
+
+控制台顶部的“启动智慧树”打开可接管 Edge 中的智慧树首页。已连接时复用浏览器和登录状态；没有连接时启动独立 Edge。重复点击会复用首页标签，不启动课程观看。登录并自行进入任意已支持课程视频页，再点击“启动课程观看”。课程观看不需要填写 courseName 或 courseUrl；单元作业仍需当前列表与 courseName 匹配。

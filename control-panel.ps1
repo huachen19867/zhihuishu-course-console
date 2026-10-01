@@ -20,9 +20,10 @@ function Read-SharedJson($filePath) {
 $script:launcher = $null
 $script:notice = ''
 $script:homeworkLauncher = $null
+$script:portalLauncher = $null
 $form = New-Object System.Windows.Forms.Form
 $form.Text = '智慧树课程控制台'
-$form.ClientSize = New-Object System.Drawing.Size(650, 620)
+$form.ClientSize = New-Object System.Drawing.Size(650, 680)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
@@ -71,6 +72,15 @@ $homeworkStop = New-Object System.Windows.Forms.Button
 $homeworkStop.Text = '停止单元测试'
 $homeworkStop.SetBounds(220,342,180,46)
 $form.Controls.Add($homeworkStop)
+foreach ($control in $form.Controls) { $control.Top += 60 }
+$portalButton = New-Object System.Windows.Forms.Button
+$portalButton.Text = '启动智慧树'
+$portalButton.SetBounds(24,16,180,44)
+$form.Controls.Add($portalButton)
+$portalHint = New-Object System.Windows.Forms.Label
+$portalHint.Text = '打开智慧树，登录后自行选择课程'
+$portalHint.SetBounds(220,27,400,28)
+$form.Controls.Add($portalHint)
 function Get-HomeworkWorker {
     try {
         $workerPid = [int]([System.IO.File]::ReadAllText((Join-Path $runtimePath 'homework/worker.pid')).Trim())
@@ -90,6 +100,18 @@ function Get-Watcher {
     return $null
 }
 function Update-Panel {
+    if ($script:portalLauncher) {
+        $script:portalLauncher.Refresh()
+        if ($script:portalLauncher.HasExited) {
+            $script:portalLauncher.WaitForExit()
+            if ($script:portalLauncher.ExitCode -ne 0) {
+                $script:notice = '启动智慧树失败：'
+                try { $script:notice += [System.IO.File]::ReadAllText((Join-Path $runtimePath 'portal-launch.stderr.log')).Trim() } catch {}
+            } else { $script:notice = '智慧树已打开，进入目标课程视频页后点击启动课程观看。' }
+            $script:portalLauncher.Dispose(); $script:portalLauncher = $null
+        }
+    }
+    $portalButton.Enabled = -not $script:portalLauncher
     $homeworkWorker = Get-HomeworkWorker
     $homeworkState = $null
     try { $homeworkState = Read-SharedJson (Join-Path $runtimePath 'homework/status.json') } catch {}
@@ -198,6 +220,13 @@ $startButton.Add_Click({
         Update-Panel
     } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'启动失败') | Out-Null }
 })
+$portalButton.Add_Click({
+    try {
+        New-Item -ItemType Directory -Path $runtimePath -Force | Out-Null
+        $script:portalLauncher = Start-Process -FilePath 'node.exe' -ArgumentList ('"' + (Join-Path $projectPath 'launcher.cjs') + '" portal') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtimePath 'portal-launch.stdout.log') -RedirectStandardError (Join-Path $runtimePath 'portal-launch.stderr.log')
+        Update-Panel
+    } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'启动智慧树失败') | Out-Null }
+})
 $stopButton.Add_Click({
     try {
         New-Item -ItemType Directory -Path $runtimePath -Force | Out-Null
@@ -223,7 +252,7 @@ $timer.Interval = 2000
 $timer.Add_Tick({ try { Update-Panel } catch { $status.Text='状态读取失败：'+$_.Exception.Message } })
 Update-Panel
 if ($SmokeTest) {
-    @{status=$status.Text;details=$details.Text;startText=$startButton.Text;stopText=$stopButton.Text;startEnabled=$startButton.Enabled;stopEnabled=$stopButton.Enabled;homework=$homeworkLabel.Text;homeworkStartEnabled=$homeworkStart.Enabled;homeworkStopEnabled=$homeworkStop.Enabled} | ConvertTo-Json
+    @{portalText=$portalButton.Text;portalTop=$portalButton.Top;headingTop=$heading.Top;status=$status.Text;details=$details.Text;startText=$startButton.Text;stopText=$stopButton.Text;startEnabled=$startButton.Enabled;stopEnabled=$stopButton.Enabled;homework=$homeworkLabel.Text;homeworkStartEnabled=$homeworkStart.Enabled;homeworkStopEnabled=$homeworkStop.Enabled} | ConvertTo-Json
     $timer.Dispose(); $form.Dispose(); exit 0
 }
 $timer.Start()

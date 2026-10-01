@@ -209,11 +209,11 @@ async function main() {
     writeStatus({ ...state, running: true, pending: pending.length, updated: new Date().toISOString() },2);
     await showStatus('自动照看运行中 · 剩余'+pending.length+'节');
     if (state.title !== lastTitle) { event('playing', { title: state.title, pending: pending.length }); lastTitle = state.title; lastTime = -1; stalledSince = null; }
+    if (state.question) { await handleQuestion(state.question); lastTime = -1; stalledSince = null; continue; }
     if(state.playbackNotice){
       await page.locator('[data-course-watch="playback-notice"]:visible').click({timeout:8000});
       event('playback-notice-dismissed');await sleep(500);continue;
     }
-    if (state.question) { await handleQuestion(state.question); lastTime = -1; stalledSince = null; continue; }
     if (state.dialogs.length) throw Error('出现需人工确认的弹窗，停止：' + state.dialogs.join(' / ').slice(0,800));
     if (!state.video) throw Error('未找到视频播放器');
     if(!state.video.ended){

@@ -15,8 +15,8 @@ async function findCoursePage(browser,config){
  }
  return undefined;
 }
-async function findCurrentCoursePage(browser){
- const pages=browser.contexts().flatMap(c=>c.pages()).filter(p=>isVideoCourseUrl(p.url()));
+async function findCurrentCoursePage(browser,predicate=isVideoCourseUrl){
+ const pages=browser.contexts().flatMap(c=>c.pages()).filter(p=>predicate(p.url()));
  if(!pages.length)return undefined;
  const visible=pages;
  if(process.platform==='win32'){

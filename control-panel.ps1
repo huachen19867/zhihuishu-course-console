@@ -20,10 +20,12 @@ function Read-SharedJson($filePath) {
 $script:launcher = $null
 $script:notice = ''
 $script:homeworkLauncher = $null
+$script:masteryLauncher = $null
+$script:masteryNotice = ''
 $script:portalLauncher = $null
 $form = New-Object System.Windows.Forms.Form
 $form.Text = '智慧树课程控制台'
-$form.ClientSize = New-Object System.Drawing.Size(650, 680)
+$form.ClientSize = New-Object System.Drawing.Size(650, 780)
 $form.StartPosition = 'CenterScreen'
 $form.FormBorderStyle = 'FixedSingle'
 $form.MaximizeBox = $false
@@ -50,7 +52,7 @@ $stopButton.Text = '停止课程观看'
 $stopButton.SetBounds(220,185,180,46)
 $form.Controls.Add($stopButton)
 $logBox = New-Object System.Windows.Forms.TextBox
-$logBox.SetBounds(24,402,595,165)
+$logBox.SetBounds(24,502,595,165)
 $logBox.Multiline = $true
 $logBox.ReadOnly = $true
 $logBox.ScrollBars = 'Vertical'
@@ -58,7 +60,7 @@ $logBox.BackColor = [System.Drawing.Color]::White
 $form.Controls.Add($logBox)
 $footer = New-Object System.Windows.Forms.Label
 $footer.Text = '停止只停止自动操作。关闭控制台不会停止后台或关闭浏览器。'
-$footer.SetBounds(24,588,600,28)
+$footer.SetBounds(24,688,600,28)
 $footer.ForeColor = [System.Drawing.Color]::DimGray
 $form.Controls.Add($footer)
 $homeworkLabel = New-Object System.Windows.Forms.Label
@@ -81,6 +83,26 @@ $portalHint = New-Object System.Windows.Forms.Label
 $portalHint.Text = '打开智慧树，登录后自行选择课程'
 $portalHint.SetBounds(220,27,400,28)
 $form.Controls.Add($portalHint)
+$masteryLabel = New-Object System.Windows.Forms.Label
+$masteryLabel.SetBounds(24,462,595,46)
+$masteryLabel.AutoEllipsis = $true
+$form.Controls.Add($masteryLabel)
+$masteryStart = New-Object System.Windows.Forms.Button
+$masteryStart.Text = '启动掌握度测试'
+$masteryStart.SetBounds(24,512,180,46)
+$form.Controls.Add($masteryStart)
+$masteryStop = New-Object System.Windows.Forms.Button
+$masteryStop.Text = '停止掌握度测试'
+$masteryStop.SetBounds(220,512,180,46)
+$form.Controls.Add($masteryStop)
+function Get-MasteryWorker {
+    try {
+        $workerPid = [int]([System.IO.File]::ReadAllText((Join-Path $runtimePath 'mastery/worker.pid')).Trim())
+        $worker = Get-CimInstance Win32_Process -Filter "ProcessId = $workerPid" -ErrorAction Stop
+        if ($worker -and $worker.Name -eq 'node.exe' -and $worker.CommandLine -like '*mastery*auto.cjs*') { return $worker }
+    } catch {}
+    return $null
+}
 function Get-HomeworkWorker {
     try {
         $workerPid = [int]([System.IO.File]::ReadAllText((Join-Path $runtimePath 'homework/worker.pid')).Trim())
@@ -143,6 +165,47 @@ function Update-Panel {
     $homeworkLabel.Text = $homeworkText
     $homeworkStart.Enabled = (-not $homeworkWorker) -and (-not $script:homeworkLauncher)
     $homeworkStop.Enabled = [bool]$homeworkWorker -and (-not $homeworkStopping)
+    $masteryWorker = Get-MasteryWorker
+    $masteryState = $null
+    try { $masteryState = Read-SharedJson (Join-Path $runtimePath 'mastery/status.json') } catch {}
+    if ($script:masteryLauncher) {
+        $script:masteryLauncher.Refresh()
+        if ($script:masteryLauncher.HasExited) {
+            $script:masteryLauncher.WaitForExit()
+            if ($script:masteryLauncher.ExitCode -ne 0) {
+                $script:masteryNotice = '掌握度测试启动失败：'
+                try { $script:masteryNotice += [System.IO.File]::ReadAllText((Join-Path $runtimePath 'mastery-launch.stderr.log')).Trim() } catch { $script:masteryNotice += '请查看启动日志。' }
+            }
+            $script:masteryLauncher.Dispose(); $script:masteryLauncher = $null
+        }
+    }
+    $masteryText = '掌握度测试：未运行（先在 Edge 打开目标课程）'
+    $masteryStopping = $masteryWorker -and (Test-Path -LiteralPath (Join-Path $runtimePath 'mastery/STOP'))
+    if ($masteryStopping) { $masteryText = '掌握度测试：正在停止，等待当前操作结束' }
+    elseif ($masteryWorker) {
+        $phase = switch ($masteryState.stage) {
+            'opening' {'打开掌握度测试'} 'reading' {'读取题目'} 'solving' {'集中分析答案'}
+            'answering' {'填写答案'} 'submitting' {'提交并核验'} 'result' {'读取测试结果'}
+            'returning' {'返回测试列表'} 'waiting-verification' {'等待你手动完成人机验证'}
+            'complete' {'全部测试已完成'} 'error' {'遇到异常'} 'stopped' {'已停止'} default {'运行中'}
+        }
+        $masteryText = '掌握度测试：' + $phase
+        if ($masteryState.unit) { $masteryText += '  ' + $masteryState.unit }
+    } elseif ($script:masteryLauncher) { $masteryText = '掌握度测试：正在启动' }
+    elseif ($script:masteryNotice) { $masteryText = $script:masteryNotice.Split("`n")[0] }
+    elseif ($masteryState.stage -eq 'complete') { $masteryText = '掌握度测试：全部测试已完成' }
+    elseif ($masteryState.stage -eq 'error') { $masteryText = '掌握度测试：已停止，需要处理异常' }
+    elseif ($masteryState.stage -eq 'stopped') { $masteryText = '掌握度测试：已停止' }
+    $masteryDetails = ''
+    if ($masteryState.completed) { $masteryDetails = '已完成：' + @($masteryState.completed).Count + ' 份' }
+    if ($masteryState.message) {
+        if ($masteryDetails) { $masteryDetails += '；' }
+        $masteryDetails += ([string]$masteryState.message).Split("`n")[0].Trim()
+    }
+    if ($masteryDetails) { $masteryText += "`r`n" + $masteryDetails }
+    $masteryLabel.Text = $masteryText
+    $masteryStart.Enabled = (-not $masteryWorker) -and (-not $script:masteryLauncher)
+    $masteryStop.Enabled = [bool]$masteryWorker -and (-not $masteryStopping)
     $watcher = Get-Watcher
     $state = $null
     try { $state = Read-SharedJson (Join-Path $runtimePath 'status.json') } catch {}
@@ -247,12 +310,27 @@ $homeworkStop.Add_Click({
     [System.IO.File]::WriteAllText((Join-Path $runtimePath 'homework/STOP'),'')
     Update-Panel
 })
+$masteryStart.Add_Click({
+    try {
+        New-Item -ItemType Directory -Path $runtimePath -Force | Out-Null
+        $script:masteryNotice = ''
+        $script:masteryLauncher = Start-Process -FilePath 'node.exe' -ArgumentList ('"' + (Join-Path $projectPath 'launcher.cjs') + '" mastery') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtimePath 'mastery-launch.stdout.log') -RedirectStandardError (Join-Path $runtimePath 'mastery-launch.stderr.log')
+        Update-Panel
+    } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'掌握度测试启动失败') | Out-Null }
+})
+$masteryStop.Add_Click({
+    try {
+        New-Item -ItemType Directory -Path (Join-Path $runtimePath 'mastery') -Force | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $runtimePath 'mastery/STOP'),'')
+        Update-Panel
+    } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'掌握度测试停止失败') | Out-Null }
+})
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 2000
 $timer.Add_Tick({ try { Update-Panel } catch { $status.Text='状态读取失败：'+$_.Exception.Message } })
 Update-Panel
 if ($SmokeTest) {
-    @{portalText=$portalButton.Text;portalTop=$portalButton.Top;headingTop=$heading.Top;status=$status.Text;details=$details.Text;startText=$startButton.Text;stopText=$stopButton.Text;startEnabled=$startButton.Enabled;stopEnabled=$stopButton.Enabled;homework=$homeworkLabel.Text;homeworkStartEnabled=$homeworkStart.Enabled;homeworkStopEnabled=$homeworkStop.Enabled} | ConvertTo-Json
+    @{portalText=$portalButton.Text;portalTop=$portalButton.Top;headingTop=$heading.Top;status=$status.Text;details=$details.Text;startText=$startButton.Text;stopText=$stopButton.Text;startEnabled=$startButton.Enabled;stopEnabled=$stopButton.Enabled;homework=$homeworkLabel.Text;homeworkStartEnabled=$homeworkStart.Enabled;homeworkStopEnabled=$homeworkStop.Enabled;mastery=$masteryLabel.Text;masteryStartText=$masteryStart.Text;masteryStopText=$masteryStop.Text;masteryStartEnabled=$masteryStart.Enabled;masteryStopEnabled=$masteryStop.Enabled;masteryTop=$masteryLabel.Top;masteryStartTop=$masteryStart.Top;panelHeight=$form.ClientSize.Height;logTop=$logBox.Top} | ConvertTo-Json
     $timer.Dispose(); $form.Dispose(); exit 0
 }
 $timer.Start()

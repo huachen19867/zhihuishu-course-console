@@ -33,6 +33,10 @@ const {chromium}=require('playwright');
     await page.locator('.text').evaluate(e=>e.textContent='videoConfigTip01');
     await page.locator('.ai-notice-dialog').evaluate(e=>{const wrapper=document.createElement('div');wrapper.style.opacity='0';e.replaceWith(wrapper);wrapper.appendChild(e);});
     assert.equal(await page.evaluate(()=>!!window.__wisdomJevDetector.playbackNotice()),false);
+    await page.setContent('<div class="dialog-tips">温馨提示<p>同时播放多个视频，其他页面的学习进度将停止记录哦！</p><button>我知道了</button></div>');
+    assert.equal(await page.evaluate(()=>!!window.__wisdomJevDetector.concurrentPlaybackNotice()),true);
+    await page.locator('p').evaluate(e=>e.textContent='其他未知提示');
+    assert.equal(await page.evaluate(()=>!!window.__wisdomJevDetector.concurrentPlaybackNotice()),false);
     console.log('Question checks passed: classic and modern quizzes, selection markers and explicit submit.');
   }finally{await browser.close();}
 })().catch(e=>{console.error(e.message);process.exitCode=1});

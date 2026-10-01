@@ -82,3 +82,7 @@
 原因是launcher按本地旧courseUrl找页并另开窗口，watcher也按旧配置寻找课程。复用现有Playwright与Windows窗口API：启动时按可接管Edge实际窗口标题和位置匹配当前标签，锁定选中URL传给worker；不能确定时明确报告，不猜测。网页焦点/可见性在本机两个标签均报告为真，不能作为唯一依据。edge-window-order.ps1为新增窗口读取辅助；README与Agent说明同步维护。启动时暂停其他课程媒体，避免网站同时播放提示。经典播放器用speedBox当前标签确认X1.5，兼容新版active标记。已现场选中古诗词过故人庄上；course-page和playback隔离检查通过。答题一度被同时播放提示遮挡，已暂停旧课程、正常确认提示并重启，续播另核验。私人配置和课程URL不提交。
 
 现场续播核验：古诗词当前视频time已推进至383秒，paused=false、rate=1.5、muted=true，已出现question-closed与resumed事件。
+
+## 2026-10-01 同时播放提示阻塞
+
+截图与runtime证明自动切换视频后出现经典dialog-tips的“同时播放多个视频，其他页面的学习进度将停止记录哦！”；原检测仅支持新版videoConfigTip01，归入未知弹窗而停止。复用detector新增严格文案与“我知道了”按钮识别，主循环优先暂停其他可接管课程媒体，再正常点击确认，返回循环继续；未知提示仍报告。新增已知提示与未知提示拒绝隔离检查，questions检查及语法通过。重启后现场古诗词视频paused=false、rate=1.5、muted=true；只有一个watcher进程。独立于CDP连接的其他浏览器播放无法控制，可能再次引发提示。

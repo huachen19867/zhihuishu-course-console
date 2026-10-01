@@ -66,6 +66,8 @@ async function inspect() {
     const d = window.__wisdomJevDetector;
     const q = d.read();
     const notice=d.playbackNotice();
+    const concurrentNotice=d.concurrentPlaybackNotice();
+    concurrentNotice?.setAttribute('data-course-watch','concurrent-notice');
     notice?.setAttribute('data-course-watch','playback-notice');
     if (q) {
       q.modal.setAttribute('data-course-watch', 'question');
@@ -82,6 +84,7 @@ async function inspect() {
     return {
       ...catalogue,
       playbackNotice:!!notice,
+      concurrentNotice:!!concurrentNotice,
       question: q ? {
         ...(q.batch?{batch:true}:{question:q.question,multiple:q.multiple,options:q.options.map(o=>({letter:o.letter,text:o.text}))}),
         questions:(q.questions||[q]).map(item=>({question:item.question,multiple:item.multiple,options:item.options.map(o=>({letter:o.letter,text:o.text})),fingerprint:item.fingerprint})),
@@ -228,6 +231,13 @@ async function main() {
     writeStatus({ ...state, running: true, pending: pending.length, updated: new Date().toISOString() },2);
     await showStatus('自动照看运行中 · 剩余'+pending.length+'节');
     if (state.title !== lastTitle) { event('playing', { title: state.title, pending: pending.length }); lastTitle = state.title; lastTime = -1; stalledSince = null; }
+    if(state.concurrentNotice){
+      for(const other of browser.contexts().flatMap(c=>c.pages())){
+        if(other!==page&&isVideoCourseUrl(other.url()))await other.evaluate(()=>document.querySelectorAll('video').forEach(v=>v.pause()));
+      }
+      await page.locator('[data-course-watch="concurrent-notice"]:visible').click({timeout:2500});
+      event('concurrent-playback-notice-dismissed');await sleep(500);continue;
+    }
     if (state.question) { await handleQuestion(state.question); noticeFailures=0; lastTime = -1; stalledSince = null; continue; }
     if(state.playbackNotice){
       try{await page.locator('[data-course-watch="playback-notice"]:visible').click({timeout:2500});}

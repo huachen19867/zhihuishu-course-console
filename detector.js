@@ -88,6 +88,10 @@
     const button=modal?.querySelector('.btn');
     return button&&visible(button)&&button.textContent.trim()==='好的'?button:null;
   }
+  function concurrentPlaybackNotice(){
+    const modal=[...document.querySelectorAll('.dialog-tips')].find(e=>visible(e)&&e.textContent.replace(/\s/g,'').includes('同时播放多个视频，其他页面的学习进度将停止记录哦！'));
+    return modal&&[...modal.querySelectorAll('button, .el-button')].find(e=>visible(e)&&e.textContent.trim()==='我知道了');
+  }
   function unansweredPrompt() {
     if (!document.body) return null;
     const warning = leaves(document.body).find(x => x.value.includes('未做答的弹题不能关闭'));
@@ -182,5 +186,5 @@
     if (!closeFound) return '找到题目和选项，但未识别到关闭按钮';
     return '找到弹窗结构，但题干提取失败';
   }
-  window.__wisdomJevDetector = { read, diagnose, visible, findClose, isSelected, clickPoint, answerFeedback, unansweredPrompt,playbackNotice };
+  window.__wisdomJevDetector = { read, diagnose, visible, findClose, isSelected, clickPoint, answerFeedback, unansweredPrompt,playbackNotice,concurrentPlaybackNotice };
 })();

@@ -3,7 +3,7 @@ const path = require('node:path');
 const {loadConfig}=require('./config.cjs');
 const {generateJson}=require('./model.cjs');
 const config=loadConfig();
-const {findCoursePage,sameCourseUrl,isVideoCourseUrl}=require('./course-page.cjs');
+const {findCoursePage,findCurrentCoursePage,sameCourseUrl,isVideoCourseUrl}=require('./course-page.cjs');
 const {readCatalogueDom}=require('./catalogue.cjs');
 const { chromium } = require('playwright');
 const { resumePlayback,setPlaybackPreferences } = require('./playback.cjs');
@@ -33,7 +33,12 @@ let cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'ut
 let browser, page, lastTitle, stalledSince, lastTime = -1, previousEvent;
 let noticeFailures=0;
 const completionRefreshes=new Set();
-let courseUrl = config.courseUrl;
+let courseUrl = process.env.COURSE_SELECTED_URL || '';
+async function selectCourse(){
+ const selected=courseUrl?await findCoursePage(browser,{courseUrl}):await findCurrentCoursePage(browser);
+ if(selected){courseUrl=selected.url();config.courseName=await selected.evaluate(()=>document.querySelector('.course-name, .courseName, .course-title')?.textContent?.trim()||document.title);}
+ return selected;
+}
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function showStatus(message, failed=false) {
   if (!page || page.isClosed()) return;
@@ -187,10 +192,8 @@ async function main() {
     console.log(JSON.stringify({ verifiedAnswer:await solve(q, true) }));
     return;
   }
-  if(!config.courseName)throw Error('请在 config.local.json 配置 courseName');
-  if(config.courseUrl&&!isVideoCourseUrl(config.courseUrl))throw Error('配置的视频链接不是已支持的智慧树课程页面');
   browser = await chromium.connectOverCDP(config.cdpUrl);
-  page = await findCoursePage(browser,config);
+  page = await selectCourse();
   if(page)courseUrl=page.url();
   if (process.argv.includes('--inspect')) {
     if (!page) throw Error('找不到指定智慧树课程页');
@@ -206,11 +209,11 @@ async function main() {
   if (!page && process.argv.includes('--wait-for-course')) {
     const waitStart=Date.now();
     while(!page && !fs.existsSync(stopFile) && Date.now()-waitStart<600000){
-      writeStatus({running:true,waitingForCourse:true,courseName:config.courseName,message:'请在独立Edge登录并打开课程：'+config.courseName,updated:new Date().toISOString()});
+      writeStatus({running:true,waitingForCourse:true,message:'请在独立Edge打开要观看的课程视频页',updated:new Date().toISOString()});
       const loginPage=browser.contexts().flatMap(c=>c.pages()).find(p=>p.url().includes('zhihuishu.com'));
-      if(loginPage){page=loginPage;await showStatus('等待你登录并进入配置的课程');page=undefined;}
+      if(loginPage){page=loginPage;await showStatus('等待你登录并打开要观看的课程');page=undefined;}
       await sleep(3000);
-      page=await findCoursePage(browser,config);
+      page=await selectCourse();
       if(page)courseUrl=page.url();
     }
     if(fs.existsSync(stopFile)){event('stopped');writeStatus({running:false,stopped:true});return;}

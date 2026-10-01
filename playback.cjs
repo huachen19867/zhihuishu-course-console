@@ -2,7 +2,8 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function setPlaybackPreferences(page){
   const speed=page.locator('.speedTab[rate="1.5"]').first();
   if(await speed.count()){
-    const active=await speed.evaluate(e=>e.classList.contains('active'));
+    const confirmed=()=>speed.evaluate(e=>e.classList.contains('active')||/^X\s*1\.5$/.test(e.closest('.speedBox')?.querySelector('span')?.textContent?.trim()||''));
+    const active=await confirmed();
     // Use normal browser input on the site's own control, including its progress recorder.
     if(!active){
       const area=page.locator('.videoArea').first();
@@ -11,7 +12,7 @@ async function setPlaybackPreferences(page){
       if(await box.count())await box.hover({force:true,timeout:4000});
       await speed.click({force:true,timeout:4000});
     }
-    if(!await speed.evaluate(e=>e.classList.contains('active')))throw Error('网站没有确认1.5倍速选项');
+    if(!await confirmed())throw Error('网站没有确认1.5倍速选项');
   }
   await page.evaluate(()=>{const v=document.querySelector('#vjs_container_html5_api')||document.querySelector('video:not(.virtual-human-video)');if(v){v.muted=true;v.volume=0;v.playbackRate=1.5}});
 }

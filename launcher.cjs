@@ -3,12 +3,11 @@ const path=require('node:path');
 const {spawn,execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const {loadConfig}=require('./config.cjs');
-const {findCoursePage,isVideoCourseUrl}=require('./course-page.cjs');
+const {findCurrentCoursePage,isVideoCourseUrl}=require('./course-page.cjs');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 (async()=>{
  const mode=process.argv[2],config=loadConfig();
  if(!['video','homework'].includes(mode))throw Error('Expected video or homework');
- if(!config.courseName)throw Error('请在 config.local.json 配置 courseName。');
  const runtime=path.join(__dirname,'runtime',mode==='homework'?'homework':'');
  fs.mkdirSync(runtime,{recursive:true});
  const pidFile=path.join(runtime,mode==='homework'?'worker.pid':'watcher.pid');
@@ -30,13 +29,16 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
   const pages=await r.json();
   if(!pages.some(p=>p.url?.includes('onlineexamh5new.zhihuishu.com/stuExamWeb.html#/webExamList?')))throw Error('Open the unit test list first.');
  }
- if(mode==='video'&&config.courseUrl){
-  if(!isVideoCourseUrl(config.courseUrl))throw Error('配置的链接不是已支持的智慧树视频页面');
+ let selectedUrl='';
+ if(mode==='video'){
   const browser=await require('playwright').chromium.connectOverCDP(config.cdpUrl);
   try{
-   if(!await findCoursePage(browser,config)){
-    const tab=await browser.contexts()[0].newPage();
-    await tab.goto(config.courseUrl,{waitUntil:'domcontentloaded',timeout:30000});
+   const selected=await findCurrentCoursePage(browser);
+   if(selected){
+    selectedUrl=selected.url();
+    for(const other of browser.contexts().flatMap(c=>c.pages())){
+     if(other!==selected&&isVideoCourseUrl(other.url()))await other.evaluate(()=>document.querySelectorAll('video').forEach(v=>v.pause()));
+    }
    }
   }finally{await browser.close()}
  }
@@ -45,7 +47,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const prefix=mode==='homework'?'worker':'watcher';
  const stdout=fs.openSync(path.join(runtime,prefix+'.stdout.log'),'a'),stderr=fs.openSync(path.join(runtime,prefix+'.stderr.log'),'a');
  try{
-  const child=spawn(process.execPath,args,{detached:true,windowsHide:true,stdio:['ignore',stdout,stderr]});
+  const child=spawn(process.execPath,args,{detached:true,windowsHide:true,env:{...process.env,COURSE_SELECTED_URL:selectedUrl},stdio:['ignore',stdout,stderr]});
   await new Promise((resolve,reject)=>{child.once('spawn',resolve);child.once('error',reject)});
   child.unref();console.log('Started '+mode+' worker');
  }finally{fs.closeSync(stdout);fs.closeSync(stderr)}

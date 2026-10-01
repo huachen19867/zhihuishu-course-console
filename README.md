@@ -13,9 +13,9 @@ npm ci --ignore-scripts --no-audit --no-fund
 Copy-Item config.example.json config.local.json
 ```
 
-编辑本地配置的 courseName，填写本人课程名称。courseUrl 可填写完整视频链接，让独立Edge启动时直接进入课程；也可留空，程序按课程名称识别本人已打开的智慧树视频页。缺少链接不会直接退出，而是显示等待登录或打开课程。cdpUrl 默认 http://127.0.0.1:9222；启动器读取其中的端口。可用 COURSE_CONFIG 环境变量指定配置文件绝对路径。本地配置已忽略。
+启动课程观看会选择可接管 Edge 当前窗口显示的课程标签页，不按旧配置链接另开课程。选择后锁定本次课程；更换课程请停止后，在 Edge 切到目标课程再启动。Windows 使用 edge-window-order.ps1 读取窗口顺序、标题和位置，避免网页修改焦点状态导致选错。无法确定时明确提示，不猜测。courseUrl 仅作为独立 Edge 首次打开时的入口；cdpUrl 默认 http://127.0.0.1:9222，可用 COURSE_CONFIG 指定本地配置文件。
 
-其他课程也可使用：修改 courseName、courseUrl，打开同一Edge中的目标课程。模型提示会使用配置的课程名称，并非固定某一学科。当前适配的是智慧树已支持的视频DOM与标题含“单元测试”的选择/判断作业；新页面、填空、简答等题型需另行适配，不能保证所有课程直接可用。
+其他课程也可使用：在同一可接管 Edge 中打开目标课程再启动。当前适配的是智慧树已支持的视频DOM与标题含“单元测试”的选择/判断作业；新页面、填空、简答等题型需另行适配，不能保证所有课程直接可用。
 
 双击 `启动与停止/控制台.cmd`，或运行 `powershell -NoProfile -STA -ExecutionPolicy Bypass -File .\control-panel.ps1`。视频点击“启动课程观看”后本人登录独立 Edge 并进入课程；“停止课程观看”停止自动视频操作。单元作业需先在该 Edge 打开课程的作业列表，再点启动单元测试。单独打开 Edge 可运行 `powershell -NoProfile -ExecutionPolicy Bypass -File .\open-edge.ps1`。
 

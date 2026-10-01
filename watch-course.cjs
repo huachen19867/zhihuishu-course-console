@@ -31,6 +31,7 @@ const solver = path.join(run, 'solver');
 fs.mkdirSync(solver, { recursive: true });
 let cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'utf8')) : {};
 let browser, page, lastTitle, stalledSince, lastTime = -1, previousEvent;
+let noticeFailures=0;
 const completionRefreshes=new Set();
 let courseUrl = config.courseUrl;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -209,9 +210,17 @@ async function main() {
     writeStatus({ ...state, running: true, pending: pending.length, updated: new Date().toISOString() },2);
     await showStatus('自动照看运行中 · 剩余'+pending.length+'节');
     if (state.title !== lastTitle) { event('playing', { title: state.title, pending: pending.length }); lastTitle = state.title; lastTime = -1; stalledSince = null; }
-    if (state.question) { await handleQuestion(state.question); lastTime = -1; stalledSince = null; continue; }
+    if (state.question) { await handleQuestion(state.question); noticeFailures=0; lastTime = -1; stalledSince = null; continue; }
     if(state.playbackNotice){
-      await page.locator('[data-course-watch="playback-notice"]:visible').click({timeout:8000});
+      try{await page.locator('[data-course-watch="playback-notice"]:visible').click({timeout:2500});}
+      catch(error){
+        if(error.name!=='TimeoutError')throw error;
+        const fresh=await inspect();
+        if(fresh.question||!fresh.playbackNotice){noticeFailures=0;continue;}
+        if(++noticeFailures>=3)throw error;
+        await sleep(1000);continue;
+      }
+      noticeFailures=0;
       event('playback-notice-dismissed');await sleep(500);continue;
     }
     if (state.dialogs.length) throw Error('出现需人工确认的弹窗，停止：' + state.dialogs.join(' / ').slice(0,800));

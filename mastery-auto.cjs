@@ -4,6 +4,7 @@ const {chromium}=require('playwright');
 const {loadConfig}=require('./config.cjs');
 const {generateJson}=require('./model.cjs');
 const {findCurrentCoursePage}=require('./course-page.cjs');
+const {openMasteryTest}=require('./mastery-entry.cjs');
 const {waitForVerification}=require('./verification.cjs');
 const {isMasteryPage,courseId,readHeatmapDom,readQuestionsDom,validateQuestions,fingerprint,validateAnswers,buildRequest,eligibleUnits,readResultDom,validateResult}=require('./mastery.cjs');
 const config=loadConfig(),runtime=path.join(__dirname,'runtime/mastery');
@@ -14,7 +15,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const stopped=()=>fs.existsSync(stopFile);
 function status(stage,info={}){
  if(!ownsLock)return;
- const state={running:!['complete','error','stopped'].includes(stage),stage,courseName,unit,completed,updated:new Date().toISOString(),...info};
+ const state={running:!['complete','error','stopped'].includes(stage),stage,courseName,unit,completed:completed.filter(r=>!r.skipped),updated:new Date().toISOString(),...info};
  fs.writeFileSync(path.join(runtime,'status.json'),JSON.stringify(state,null,2));
  fs.appendFileSync(path.join(runtime,'events.ndjson'),JSON.stringify({at:state.updated,stage,unit,...info})+'\n');
 }
@@ -140,10 +141,13 @@ async function main(){
   const next=eligibleUnits(units,completed,course)[0];
   if(!next){status('complete',{message:'本课程待测知识点已处理；低分记录可在网站查看'});return;}
   unit=next.name;status('opening');
-  const tile=page.locator('li.item-box').nth(next.index);await tile.scrollIntoViewIfNeeded();await guard();await tile.hover({timeout:4000});
-  const popover=page.locator('.mastery-box-custom-popover:visible').filter({has:page.getByText(unit,{exact:true})});
-  await popover.getByRole('button',{name:'提升掌握度',exact:true}).click({timeout:4000});
-  await page.locator('.exam .exam-item').first().waitFor({timeout:15000});await guard();await finishExam();
+  const opened=await openMasteryTest(page,{index:next.index,name:unit,guard});
+  if(opened==='no-questions'){
+   completed.push({course,unit,skipped:true,reason:'网站提示暂无练习题目，不纳入掌握度考核',at:new Date().toISOString()});
+   fs.writeFileSync(resultFile,JSON.stringify(completed,null,2));
+   status('reading',{message:'网站未提供该知识点练习题，记录跳过并继续'});continue;
+  }
+  await finishExam();
  }
  throw Error('知识点处理超过预期上限，停止核验');
 }

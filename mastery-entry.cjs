@@ -6,6 +6,7 @@ async function openMasteryTest(page,{index,name,guard}){
   if(await page.locator('.exam .exam-item').count())return;
   const tile=page.locator('li.item-box').nth(index);
   if((await tile.locator('.item-box-name').innerText()).trim()!==name)throw Error('知识点目录已变化，停止进入');
+  await page.mouse.move(5,5);await sleep(350);
   // Center the tile within the scrolling pane before opening its animated popover.
   await tile.evaluate(e=>e.scrollIntoView({block:'center',inline:'nearest'}));
   await tile.hover({timeout:4000});await sleep(350);

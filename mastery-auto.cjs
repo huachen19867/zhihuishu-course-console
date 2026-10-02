@@ -64,7 +64,20 @@ async function fill(data,answers,knowledge){
    await guard();
    const label=card.locator('label.el-radio, label.el-checkbox').nth(index);
    const selected=await label.locator('input').isChecked();
-   if(q.type==='多选题'?(selected!==answer.choices.includes(o.id)):(!selected&&answer.choices.includes(o.id)))await label.click({timeout:4000});
+   const shouldSelect=answer.choices.includes(o.id);
+   if(q.type==='多选题'?selected!==shouldSelect:(!selected&&shouldSelect)){
+    await label.scrollIntoViewIfNeeded();
+    const box=await label.boundingBox();if(!box)throw Error('第 '+(q.index+1)+' 题选项不可见');
+    await page.mouse.click(box.x+Math.min(20,box.width/4),box.y+box.height/2);
+    let confirmed=false;
+    for(let poll=0;poll<20;poll++){
+     await guard();
+     confirmed=await label.locator('input').isChecked()===shouldSelect;
+     if(confirmed)break;
+     await sleep(100);
+    }
+    if(!confirmed)throw Error('点击后网站未更新第 '+(q.index+1)+' 题选项状态');
+   }
   }
   const fresh=(await questions()).rows[q.index].options.filter(o=>o.selected).map(o=>o.id).sort();
   if(JSON.stringify(fresh)!==JSON.stringify([...answer.choices].sort()))throw Error('网站未确认第 '+(q.index+1)+' 题选中状态');

@@ -33,15 +33,20 @@ async function solve(data,knowledge){
  if(fs.existsSync(answerFile))return checked(JSON.parse(fs.readFileSync(answerFile,'utf8')));
  const request=buildRequest(courseName||course,data);
  for(let attempt=0;attempt<2;attempt++){
-  await guard();status('solving',{message:attempt?'模型超时，重试一次':'集中分析 '+data.rows.length+' 道题'});
+  await guard();status('solving',{message:attempt?'上次请求无有效答案，自动重试一次':'集中分析 '+data.rows.length+' 道题'});
   const workdir=path.join(runtime,'request-'+key+'-'+Date.now());
   try{
-   const raw=await generateJson({...request,workdir});
+   const raw=await generateJson({...request,prompt:request.prompt+(attempt?'\n上次请求未得到有效答案。逐题核对index，choices只能使用该题options中的id，禁止使用其他题的选项id。必须覆盖全部题目。':''),workdir});
    await guard();
    if(fingerprint(course,knowledge,await questions())!==key)throw Error('分析期间题目已变化，未填写');
    const answers=checked(raw);
    fs.writeFileSync(answerFile,JSON.stringify({answers},null,2));return answers;
-  }catch(error){if(attempt||!error.message.includes('Model request timed out'))throw error;await sleep(2000);}
+  }catch(error){
+   if(attempt||!(/Model request timed out|模型答案未覆盖全部题目|模型答案与题目选项不匹配/.test(error.message)))throw error;
+   await guard();
+   if(fingerprint(course,knowledge,await questions())!==key)throw Error('重试前题目已变化，未填写');
+   await sleep(2000);
+  }
  }
 }
 async function fill(data,answers,knowledge){

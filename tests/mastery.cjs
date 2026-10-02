@@ -120,6 +120,12 @@ async function main(){
  assert.equal(material.rows[0].options[0].text,'选项内容：'+hostile);
  assert.deepEqual(request.schema.required,['answers']);
  assert.equal(request.schema.additionalProperties,false);
+ for(const q of valid.rows){
+  const branch=request.schema.properties.answers.items.anyOf.find(b=>b.properties.index.enum[0]===q.index);
+  assert.deepEqual(branch.properties.choices.items.enum,q.options.map(o=>o.id),'结构化输出必须约束每题自己的选项，不能借用其他题编号');
+ }
+ const wrongQuestion=copy(answers);wrongQuestion.answers.find(a=>a.index===2).choices=['a'];
+ assert.throws(()=>validateAnswers(valid,wrongQuestion),/模型答案与题目选项不匹配/,'判断题借用上一题编号时禁止填写');
 
  const units=[
   {name:'待学灰色',state:'gray'},{name:'待测红色',state:'red'},{name:'待测黄色',state:'yellow'},

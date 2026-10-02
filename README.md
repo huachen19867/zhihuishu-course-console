@@ -70,3 +70,5 @@ Windows控制台以共享方式读取状态文件；照看程序遇到短暂文�
 npm test 在独立无界面Edge中检查弹题、播放、验证和模型适配，不操作个人课程或调用付费模型。控制台可用 -SmokeTest 检查构建和状态。网站改版与真实验证仍有适配风险。技术经验见 [TECHNICAL_LOG.md](TECHNICAL_LOG.md)。复用 [Playwright](https://github.com/microsoft/playwright) 和 [Edge DevTools Protocol](https://learn.microsoft.com/en-us/microsoft-edge/devtools/protocol/)，尚未覆盖所有课程页面。
 
 控制台顶部的“启动智慧树”打开可接管 Edge 中的智慧树首页。已连接时复用浏览器和登录状态；没有连接时启动独立 Edge。重复点击会复用首页标签，不启动课程观看。登录并自行进入任意已支持课程视频页，再点击“启动课程观看”。课程观看不需要填写 courseName 或 courseUrl；单元作业仍需当前列表与 courseName 匹配。
+
+掌握度模型输出按题号绑定本题选项ID；无效答案或请求超时自动重试一次，重试前重新核验题目与停止状态。连续失败仍保留测试页提示，不能把跨题编号当成可用答案。

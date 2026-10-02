@@ -16,6 +16,7 @@ const stopFile = path.join(run, 'STOP');
 const stateFile = path.join(run, 'status.json');
 const retryWait = new Int32Array(new SharedArrayBuffer(4));
 function writeStatus(value,spaces=0){
+  if(watchDeadline&&value.running)value.durationMinutesRemaining=Math.max(0,Math.ceil((watchDeadline-Date.now())/60000));
   const data=JSON.stringify(value,null,spaces);
   for(let attempt=0;attempt<25;attempt++){
     try{fs.writeFileSync(stateFile,data);return;}
@@ -33,6 +34,17 @@ let cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'ut
 let browser, page, lastTitle, stalledSince, lastTime = -1, previousEvent;
 let noticeFailures=0;
 const completionRefreshes=new Set();
+const watchDeadline=Number(process.env.COURSE_WATCH_DEADLINE_UTC_MS)||0;
+let timedCompletion=false,durationTimer;
+if(watchDeadline){
+  durationTimer=setTimeout(()=>{
+    if(fs.existsSync(stopFile))return;
+    timedCompletion=true;
+    fs.writeFileSync(stopFile,'30-minute duration reached');
+    event('duration-complete',{minutes:30});
+  },Math.max(0,watchDeadline-Date.now()));
+  durationTimer.unref();
+}
 let courseUrl = process.env.COURSE_SELECTED_URL || '';
 async function selectCourse(){
  const selected=courseUrl?await findCoursePage(browser,{courseUrl}):await findCurrentCoursePage(browser);
@@ -219,7 +231,7 @@ async function main() {
       page=await selectCourse();
       if(page)courseUrl=page.url();
     }
-    if(fs.existsSync(stopFile)){event('stopped');writeStatus({running:false,stopped:true});return;}
+    if(fs.existsSync(stopFile)){event(timedCompletion?'duration-complete':'stopped');writeStatus({running:false,stopped:true,timedCompletion});return;}
   }
   if(!page) throw Error('尚未进入课程，请进入课程后重新点击开始');
   while (!fs.existsSync(stopFile)) {
@@ -294,17 +306,22 @@ async function main() {
     }
     await sleep(3000);
   }
-  event('stopped');
-  writeStatus({running:false,stopped:true,updated:new Date().toISOString()});
-  await showStatus('自动照看已停止');
+  event(timedCompletion?'duration-complete':'stopped');
+  writeStatus({running:false,stopped:true,timedCompletion,updated:new Date().toISOString()});
+  await showStatus(timedCompletion?'30分钟自动刷课时间已到，已停止':'自动照看已停止');
 }
 async function runWatcher(){try{await main()}catch(e){
   if(page&&!page.isClosed()&&!fs.existsSync(stopFile)&&await verificationVisible(page)){
     try{await waitVerification();return await runWatcher()}catch(waitError){e=waitError;}
   }
+  if(fs.existsSync(stopFile)){
+    event(timedCompletion?'duration-complete':'stopped');
+    writeStatus({running:false,stopped:true,timedCompletion,updated:new Date().toISOString()});
+    return;
+  }
   event('needs-attention', { message: e.message });
   writeStatus({ running:false, needsAttention:true, message:e.message, updated:new Date().toISOString() },2);
   process.exitCode = 1;
   await showStatus('自动照看已停止：'+e.message.split('\n')[0].slice(0,140),true).catch(()=>{});
-}finally{if(browser)await browser.close()}}
+}finally{if(durationTimer)clearTimeout(durationTimer);if(browser)await browser.close()}}
 runWatcher();

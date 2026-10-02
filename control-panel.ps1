@@ -51,6 +51,11 @@ $stopButton = New-Object System.Windows.Forms.Button
 $stopButton.Text = '停止课程观看'
 $stopButton.SetBounds(220,185,180,46)
 $form.Controls.Add($stopButton)
+$durationButton = New-Object System.Windows.Forms.Button
+$durationButton.Text = '自动刷课30分钟'
+$durationButton.SetBounds(416,185,200,46)
+$durationButton.BackColor = [System.Drawing.Color]::FromArgb(232,235,255)
+$form.Controls.Add($durationButton)
 $logBox = New-Object System.Windows.Forms.TextBox
 $logBox.SetBounds(24,502,595,165)
 $logBox.Multiline = $true
@@ -231,6 +236,7 @@ function Update-Panel {
         elseif ($state.waitingVerification) { $status.Text = '等待你手动完成人机验证；完成后自动继续' }
         elseif ($state.waitingCompletion) { $status.Text = '视频已播完，等待网站更新学习完成标记' }
         elseif ($state.question) { $status.Text = '正在处理弹题' }
+        if ($state.durationMinutesRemaining -gt 0) { $status.Text += '（定时剩余约 ' + $state.durationMinutesRemaining + ' 分钟）' }
         $status.ForeColor = [System.Drawing.Color]::ForestGreen
     } elseif ($script:launcher) {
         $status.Text = '正在启动浏览器和照看程序……'
@@ -245,6 +251,8 @@ function Update-Panel {
     }
     $startButton.Enabled = (-not $watcher) -and (-not $script:launcher)
     $stopButton.Enabled = [bool]$watcher -and (-not $stopping)
+    $durationButton.Enabled = (-not $watcher) -and (-not $script:launcher)
+    if ($state.timedCompletion) { $status.Text = '30分钟自动刷课时间已到，已停止'; $status.ForeColor = [System.Drawing.Color]::DarkOrange }
     $detailText = ''
     if ($state.title) { $detailText = '当前视频：' + $state.title }
     if ($null -ne $state.pending) { $detailText += "`r`n未完成：" + $state.pending + ' 节' }
@@ -298,6 +306,15 @@ $stopButton.Add_Click({
         Update-Panel
     } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'停止失败') | Out-Null }
 })
+$durationButton.Add_Click({
+    try {
+        New-Item -ItemType Directory -Path $runtimePath -Force | Out-Null
+        $script:notice = ''
+        $script:launcher = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $projectPath 'start-watcher.ps1') + '" -DurationMinutes 30') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtimePath 'console-launch.stdout.log') -RedirectStandardError (Join-Path $runtimePath 'console-launch.stderr.log')
+        $script:notice = '定时刷课已启动，到30分钟后自动停止。'
+        Update-Panel
+    } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'定时刷课启动失败') | Out-Null }
+})
 $homeworkStart.Add_Click({
     try {
         New-Item -ItemType Directory -Path $runtimePath -Force | Out-Null
@@ -330,7 +347,7 @@ $timer.Interval = 2000
 $timer.Add_Tick({ try { Update-Panel } catch { $status.Text='状态读取失败：'+$_.Exception.Message } })
 Update-Panel
 if ($SmokeTest) {
-    @{portalText=$portalButton.Text;portalTop=$portalButton.Top;headingTop=$heading.Top;status=$status.Text;details=$details.Text;startText=$startButton.Text;stopText=$stopButton.Text;startEnabled=$startButton.Enabled;stopEnabled=$stopButton.Enabled;homework=$homeworkLabel.Text;homeworkStartEnabled=$homeworkStart.Enabled;homeworkStopEnabled=$homeworkStop.Enabled;mastery=$masteryLabel.Text;masteryStartText=$masteryStart.Text;masteryStopText=$masteryStop.Text;masteryStartEnabled=$masteryStart.Enabled;masteryStopEnabled=$masteryStop.Enabled;masteryTop=$masteryLabel.Top;masteryStartTop=$masteryStart.Top;panelHeight=$form.ClientSize.Height;logTop=$logBox.Top} | ConvertTo-Json
+    @{portalText=$portalButton.Text;portalTop=$portalButton.Top;headingTop=$heading.Top;status=$status.Text;details=$details.Text;startText=$startButton.Text;stopText=$stopButton.Text;durationText=$durationButton.Text;durationEnabled=$durationButton.Enabled;startEnabled=$startButton.Enabled;stopEnabled=$stopButton.Enabled;homework=$homeworkLabel.Text;homeworkStartEnabled=$homeworkStart.Enabled;homeworkStopEnabled=$homeworkStop.Enabled;mastery=$masteryLabel.Text;masteryStartText=$masteryStart.Text;masteryStopText=$masteryStop.Text;masteryStartEnabled=$masteryStart.Enabled;masteryStopEnabled=$masteryStop.Enabled;masteryTop=$masteryLabel.Top;masteryStartTop=$masteryStart.Top;panelHeight=$form.ClientSize.Height;logTop=$logBox.Top} | ConvertTo-Json
     $timer.Dispose(); $form.Dispose(); exit 0
 }
 $timer.Start()

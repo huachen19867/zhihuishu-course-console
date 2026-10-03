@@ -5,6 +5,8 @@ const {generateJson}=require('./model.cjs');
 const config=loadConfig();
 const {findCoursePage,findCurrentCoursePage,sameCourseUrl,isVideoCourseUrl}=require('./course-page.cjs');
 const {readCatalogueDom}=require('./catalogue.cjs');
+const {selectNextVideo}=require('./course-duration.cjs');
+const {readProgressNoticeDom,readNetworkNoticeDom}=require('./course-notice.cjs');
 const { chromium } = require('playwright');
 const { resumePlayback,setPlaybackPreferences } = require('./playback.cjs');
 const {closeQuestion}=require('./close-question.cjs');
@@ -16,6 +18,7 @@ const stopFile = path.join(run, 'STOP');
 const stateFile = path.join(run, 'status.json');
 const retryWait = new Int32Array(new SharedArrayBuffer(4));
 function writeStatus(value,spaces=0){
+  if(watchDeadline){value.timedMode=true;value.deadlineUtcMs=watchDeadline;}
   if(watchDeadline&&value.running)value.durationMinutesRemaining=Math.max(0,Math.ceil((watchDeadline-Date.now())/60000));
   const data=JSON.stringify(value,null,spaces);
   for(let attempt=0;attempt<25;attempt++){
@@ -33,15 +36,21 @@ fs.mkdirSync(solver, { recursive: true });
 let cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'utf8')) : {};
 let browser, page, lastTitle, stalledSince, lastTime = -1, previousEvent;
 let noticeFailures=0;
+let networkRecoveries=0;
 const completionRefreshes=new Set();
 const watchDeadline=Number(process.env.COURSE_WATCH_DEADLINE_UTC_MS)||0;
 let timedCompletion=false,durationTimer;
+async function pauseTimedPlayback(){
+  if(!page||page.isClosed()||!sameCourseUrl(page.url(),courseUrl))return;
+  await page.evaluate(()=>{const v=document.querySelector('#vjs_container_html5_api')||document.querySelector('video:not(.virtual-human-video)');v?.pause();});
+}
 if(watchDeadline){
   durationTimer=setTimeout(()=>{
     if(fs.existsSync(stopFile))return;
     timedCompletion=true;
     fs.writeFileSync(stopFile,'30-minute duration reached');
-    event('duration-complete',{minutes:30});
+    event('duration-deadline',{minutes:30});
+    pauseTimedPlayback().catch(error=>event('pause-failed',{message:error.message.split('\n')[0]}));
   },Math.max(0,watchDeadline-Date.now()));
   durationTimer.unref();
 }
@@ -74,6 +83,8 @@ async function inspect() {
   await page.locator('#vjs_container_html5_api, video:not(.virtual-human-video)').first().waitFor({state:'attached',timeout:15000});
   await page.evaluate(detector);
   const catalogue=await page.evaluate(readCatalogueDom);
+  const progressNotice=await page.evaluate(readProgressNoticeDom);
+  const networkNotice=await page.evaluate(readNetworkNoticeDom);
   return page.evaluate(catalogue => {
     const d = window.__wisdomJevDetector;
     const q = d.read();
@@ -104,7 +115,7 @@ async function inspect() {
       } : null,
       dialogs,
     };
-  },catalogue);
+  },{...catalogue,progressNotice,networkNotice});
 }
 async function requestAnswer(prompt,schema,fingerprint){
   for(let attempt=0;attempt<2;attempt++){
@@ -168,6 +179,8 @@ async function handleQuestion(q) {
         const selected=await page.evaluate(index=>{const d=window.__wisdomJevDetector,q=d.read(),item=q?.questions?.[index]||q;return item?.options.filter(d.isSelected).map(o=>o.letter)||[]},index);
         const clicks=item.multiple?item.options.filter(o=>letters.includes(o.letter)!==selected.includes(o.letter)).map(o=>o.letter):selected.includes(letters[0])?[]:letters;
         for(const letter of clicks){
+          await waitVerification();
+          if(fs.existsSync(stopFile))return;
           await page.locator('[data-course-question="'+index+'"][data-course-answer="'+letter+'"]:visible').first().click({timeout:8000});
           await sleep(250);
         }
@@ -179,7 +192,11 @@ async function handleQuestion(q) {
     }
   }
   const current=await inspect();
+  if(current.question&&current.question.fingerprint!==q.fingerprint)return;
   if(current.question?.requiresSubmit){
+    await waitVerification();
+    if(fs.existsSync(stopFile))return;
+    if((await inspect()).question?.fingerprint!==q.fingerprint)return;
     await page.locator('[data-course-watch="submit"]:visible').first().click({timeout:8000});
     await page.waitForFunction(()=>{const d=window.__wisdomJevDetector,q=d?.read();return !q||!q.submit||d.answerFeedback(q.modal)},null,{timeout:10000});
     event('question-submitted');
@@ -200,6 +217,8 @@ async function waitVerification(){
    await showStatus('等待你手动完成人机验证；完成后自动继续',true);
   },onCleared:()=>{event('verification-cleared');lastTime=-1;stalledSince=null;}});
 }
+const playbackOptions={stopped:()=>fs.existsSync(stopFile),guard:waitVerification,
+  shouldYield:async()=>{const s=await inspect();return !!(s.question||s.playbackNotice||s.concurrentNotice||s.progressNotice||s.networkNotice||s.dialogs.length);}};
 async function main() {
   if (process.argv.includes('--verify-solver')) {
     const q = { question:'古代边塞诗不仅描写了西域壮丽的奇景，也体现了民族融合的过程。（ ）', options:[{letter:'A',text:'正确'},{letter:'B',text:'错误'}] };
@@ -236,22 +255,56 @@ async function main() {
   if(!page) throw Error('尚未进入课程，请进入课程后重新点击开始');
   while (!fs.existsSync(stopFile)) {
     await waitVerification();
+    if(fs.existsSync(stopFile))break;
     const state = await inspect();
     if(!state.rows.length)throw Error('未识别到课程视频目录；页面可能尚未加载或需要适配，不会将其误报为完成');
     const current = state.rows.find(r => r.current);
     const pending = state.rows.filter(r => !r.done);
     writeStatus({ ...state, running: true, pending: pending.length, updated: new Date().toISOString() },2);
-    await showStatus('自动照看运行中 · 剩余'+pending.length+'节');
+    await showStatus(watchDeadline?'30分钟播放运行中 · 剩余约'+Math.max(0,Math.ceil((watchDeadline-Date.now())/60000))+'分钟':'自动照看运行中 · 剩余'+pending.length+'节');
     if (state.title !== lastTitle) { event('playing', { title: state.title, pending: pending.length }); lastTitle = state.title; lastTime = -1; stalledSince = null; }
+    if (state.question) { await handleQuestion(state.question); noticeFailures=0; lastTime = -1; stalledSince = null; continue; }
+    if(state.networkNotice){
+      if(networkRecoveries>=1)throw Error('网站学习进度提交失败，普通刷新后仍未恢复，请手动返回学堂重新进入课程');
+      await waitVerification();
+      if(fs.existsSync(stopFile))break;
+      networkRecoveries++;
+      event('network-notice-recovery');await showStatus('网站提示网络提交失败，正在普通刷新恢复一次');
+      await page.reload({waitUntil:'domcontentloaded'});
+      lastTime=-1;stalledSince=null;previousEvent=null;await sleep(1500);continue;
+    }
     if(state.concurrentNotice){
+      if(fs.existsSync(stopFile))break;
       for(const other of browser.contexts().flatMap(c=>c.pages())){
         if(other!==page&&isVideoCourseUrl(other.url()))await other.evaluate(()=>document.querySelectorAll('video').forEach(v=>v.pause()));
       }
-      await page.locator('[data-course-watch="concurrent-notice"]:visible').click({timeout:2500});
+      await waitVerification();
+      if(fs.existsSync(stopFile))break;
+      try{await page.locator('[data-course-watch="concurrent-notice"]:visible').click({timeout:2500});}
+      catch(error){
+        const fresh=await inspect();
+        if(fresh.question||!fresh.concurrentNotice){noticeFailures=0;continue;}
+        if(++noticeFailures>=3)throw error;
+        await sleep(500);continue;
+      }
+      noticeFailures=0;
       event('concurrent-playback-notice-dismissed');await sleep(500);continue;
     }
-    if (state.question) { await handleQuestion(state.question); noticeFailures=0; lastTime = -1; stalledSince = null; continue; }
+    if(state.progressNotice){
+      await waitVerification();
+      if(fs.existsSync(stopFile))break;
+      try{await page.locator('[data-course-watch="progress-notice"]:visible').first().click({timeout:2500});}
+      catch(error){
+        const fresh=await inspect();
+        if(fresh.question||!fresh.progressNotice){noticeFailures=0;continue;}
+        if(++noticeFailures>=3)throw error;
+        await sleep(500);continue;
+      }
+      noticeFailures=0;event('progress-notice-dismissed');await sleep(500);continue;
+    }
     if(state.playbackNotice){
+      await waitVerification();
+      if(fs.existsSync(stopFile))break;
       try{await page.locator('[data-course-watch="playback-notice"]:visible').click({timeout:2500});}
       catch(error){
         if(error.name!=='TimeoutError')throw error;
@@ -266,11 +319,11 @@ async function main() {
     if (state.dialogs.length) throw Error('出现需人工确认的弹窗，停止：' + state.dialogs.join(' / ').slice(0,800));
     if (!state.video) throw Error('未找到视频播放器');
     if(!state.video.ended){
-      if(state.video.paused)await resumePlayback(page);
-      await setPlaybackPreferences(page);
+      if(state.video.paused&&await resumePlayback(page,playbackOptions)===false)continue;
+      if(await setPlaybackPreferences(page,playbackOptions)===false)continue;
     }
     if (state.video.ended) {
-      if (current && !current.done) {
+      if (!watchDeadline && current && !current.done) {
         const endedKey = 'waiting-completion:' + state.title;
         if (previousEvent !== endedKey) { event('waiting-completion', { title: state.title }); previousEvent = endedKey; stalledSince = Date.now(); }
         await showStatus('视频已播完，等待网站更新学习完成标记');
@@ -281,21 +334,39 @@ async function main() {
           if(fs.existsSync(stopFile))continue;
           await page.reload({waitUntil:'domcontentloaded'});
           await inspect();
-          await resumePlayback(page);
-          await setPlaybackPreferences(page);
+          if(await resumePlayback(page,playbackOptions)===false)continue;
+          if(await setPlaybackPreferences(page,playbackOptions)===false)continue;
           lastTime=-1;stalledSince=null;previousEvent=null;continue;
         }
         if (Date.now() - stalledSince > 90000) throw Error('视频结束但学习完成标记仍未更新，停止核验');
       } else {
-        const next = state.rows.find(r => !r.done && r.index > (current?.index ?? -1)) || pending[0];
+        const next = selectNextVideo(state.rows,current,{timed:!!watchDeadline});
         if (!next) { event('complete', { videos: state.rows.length }); writeStatus({ running:false, complete:true, videos:state.rows.length, updated:new Date().toISOString() }); return; }
+        await waitVerification();
+        if(fs.existsSync(stopFile))break;
         await page.locator(state.catalogueSelector).nth(next.index).locator(state.titleSelector).click({ timeout: 10000 });
         event('next-video', { title: next.title });
-        await sleep(3000); lastTime = -1; stalledSince = null; previousEvent = null;
+        lastTime = -1; stalledSince = null; previousEvent = null;
+        if(next.index!==current?.index){
+          // The catalogue can change before the old video's ended state clears.
+          // Wait for the replacement media (or a dialog) before considering another switch.
+          await page.waitForFunction(()=>{
+            const d=window.__wisdomJevDetector;
+            if([...document.querySelectorAll('[role="dialog"], .ai-test-question-wrapper, .ai-class-exercise-dialog')].some(e=>d?.visible(e)))return true;
+            const v=document.querySelector('#vjs_container_html5_api')||document.querySelector('video:not(.virtual-human-video)');
+            return v&&!v.ended&&v.readyState>=2;
+          },null,{timeout:15000});
+        }
+        await sleep(500);
+        if(fs.existsSync(stopFile))break;
+        if(next.index===current?.index){
+          if(await resumePlayback(page,playbackOptions)===false)continue;
+          if((await inspect()).video?.ended)throw Error('网站未响应视频重播，请使用播放器重播按钮');
+        }
         continue;
       }
     } else if (state.video.paused) {
-      await resumePlayback(page);
+      if(await resumePlayback(page,playbackOptions)===false)continue;
       event('resumed', { title: state.title });
       stalledSince = null;
     } else {
@@ -307,6 +378,7 @@ async function main() {
     await sleep(3000);
   }
   event(timedCompletion?'duration-complete':'stopped');
+  if(timedCompletion)await pauseTimedPlayback();
   writeStatus({running:false,stopped:true,timedCompletion,updated:new Date().toISOString()});
   await showStatus(timedCompletion?'30分钟自动刷课时间已到，已停止':'自动照看已停止');
 }
@@ -315,12 +387,13 @@ async function runWatcher(){try{await main()}catch(e){
     try{await waitVerification();return await runWatcher()}catch(waitError){e=waitError;}
   }
   if(fs.existsSync(stopFile)){
+    if(timedCompletion)await pauseTimedPlayback().catch(()=>{});
     event(timedCompletion?'duration-complete':'stopped');
     writeStatus({running:false,stopped:true,timedCompletion,updated:new Date().toISOString()});
     return;
   }
   event('needs-attention', { message: e.message });
-  writeStatus({ running:false, needsAttention:true, message:e.message, updated:new Date().toISOString() },2);
+  writeStatus({ running:false, needsAttention:true, message:e.message, ...(watchDeadline?{durationMinutesRemaining:Math.max(0,Math.ceil((watchDeadline-Date.now())/60000)),earlyStop:true}:{}),updated:new Date().toISOString() },2);
   process.exitCode = 1;
   await showStatus('自动照看已停止：'+e.message.split('\n')[0].slice(0,140),true).catch(()=>{});
 }finally{if(durationTimer)clearTimeout(durationTimer);if(browser)await browser.close()}}

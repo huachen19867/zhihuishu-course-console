@@ -23,6 +23,7 @@ $script:homeworkLauncher = $null
 $script:masteryLauncher = $null
 $script:masteryNotice = ''
 $script:portalLauncher = $null
+$script:lastWatchAlert = ''
 $form = New-Object System.Windows.Forms.Form
 $form.Text = '智慧树课程控制台'
 $form.ClientSize = New-Object System.Drawing.Size(650, 780)
@@ -241,6 +242,10 @@ function Update-Panel {
     } elseif ($script:launcher) {
         $status.Text = '正在启动浏览器和照看程序……'
         $status.ForeColor = [System.Drawing.Color]::DarkOrange
+    } elseif ($state.earlyStop -or ($state.timedMode -and $state.complete) -or ($state.running -and -not (Test-Path -LiteralPath (Join-Path $runtimePath 'STOP')))) {
+        $status.Text = '任务提前停止，尚未完成'
+        if ($state.timedMode) { $status.Text = '30分钟任务提前停止，尚未完成' }
+        $status.ForeColor = [System.Drawing.Color]::Firebrick
     } elseif ($state.complete) {
         $status.Text = '课程视频已全部完成'
         $status.ForeColor = [System.Drawing.Color]::ForestGreen
@@ -252,10 +257,19 @@ function Update-Panel {
     $startButton.Enabled = (-not $watcher) -and (-not $script:launcher)
     $stopButton.Enabled = [bool]$watcher -and (-not $stopping)
     $durationButton.Enabled = (-not $watcher) -and (-not $script:launcher)
-    if ($state.timedCompletion) { $status.Text = '30分钟自动刷课时间已到，已停止'; $status.ForeColor = [System.Drawing.Color]::DarkOrange }
+    if ($state.timedCompletion -and -not $watcher -and -not $script:launcher) { $status.Text = '30分钟时间已到，播放和自动操作已停止'; $status.ForeColor = [System.Drawing.Color]::DarkOrange }
+    if (-not $watcher -and -not $script:launcher -and ($state.needsAttention -or $state.earlyStop -or ($state.timedMode -and $state.complete) -or ($state.running -and -not (Test-Path -LiteralPath (Join-Path $runtimePath 'STOP'))))) {
+        $alertId = [string]$state.updated + '|' + [string]$state.message
+        if ($script:lastWatchAlert -ne $alertId) {
+            $script:lastWatchAlert = $alertId
+            [System.Media.SystemSounds]::Exclamation.Play()
+            if (-not $SmokeTest) { $form.WindowState = 'Normal'; $form.Activate() | Out-Null }
+        }
+    }
     $detailText = ''
     if ($state.title) { $detailText = '当前视频：' + $state.title }
-    if ($null -ne $state.pending) { $detailText += "`r`n未完成：" + $state.pending + ' 节' }
+    if ($state.timedMode) { $detailText += "`r`n定时模式：按目录连续播放，允许重播" }
+    elseif ($null -ne $state.pending) { $detailText += "`r`n未完成：" + $state.pending + ' 节' }
     if ($state.video) {
         $detailText += '    倍速：' + $state.video.rate
         $detailText += '    静音：' + $(if($state.video.muted -or $state.video.volume -eq 0){'是'}else{'否'})
@@ -275,6 +289,8 @@ function Update-Panel {
                 'question-closed' {'答题弹窗已关闭'} 'stopped' {'自动操作已停止'}
                 'waiting-verification' {'等待手动人机验证'} 'verification-cleared' {'验证已消失，继续操作'}
                 'complete' {'课程视频已全部完成'} 'needs-attention' {'程序已停止：'+$entry.message.Split("`n")[0]}
+                'progress-notice-dismissed' {'每日学习进度提示已关闭'}
+                'duration-deadline' {'30分钟到点，停止播放'} 'duration-complete' {'30分钟任务已停止'}
                 default {$entry.kind}
             }
             ([DateTimeOffset]::Parse($entry.at).ToLocalTime().ToString('HH:mm:ss')) + '  ' + $label
@@ -311,7 +327,7 @@ $durationButton.Add_Click({
         New-Item -ItemType Directory -Path $runtimePath -Force | Out-Null
         $script:notice = ''
         $script:launcher = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $projectPath 'start-watcher.ps1') + '" -DurationMinutes 30') -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtimePath 'console-launch.stdout.log') -RedirectStandardError (Join-Path $runtimePath 'console-launch.stderr.log')
-        $script:notice = '定时刷课已启动，到30分钟后自动停止。'
+        $script:notice = '连续播放30分钟已启动：按目录播放，允许重播，到点暂停视频并停止自动操作。'
         Update-Panel
     } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message,'定时刷课启动失败') | Out-Null }
 })

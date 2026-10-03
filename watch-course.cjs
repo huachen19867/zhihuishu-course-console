@@ -37,6 +37,7 @@ let cache = fs.existsSync(cacheFile) ? JSON.parse(fs.readFileSync(cacheFile, 'ut
 let browser, page, lastTitle, stalledSince, lastTime = -1, previousEvent;
 let noticeFailures=0;
 let networkRecoveries=0;
+let pendingPlaybackIndex=null;
 const completionRefreshes=new Set();
 const watchDeadline=Number(process.env.COURSE_WATCH_DEADLINE_UTC_MS)||0;
 let timedCompletion=false,durationTimer;
@@ -259,6 +260,7 @@ async function main() {
     const state = await inspect();
     if(!state.rows.length)throw Error('未识别到课程视频目录；页面可能尚未加载或需要适配，不会将其误报为完成');
     const current = state.rows.find(r => r.current);
+    if(watchDeadline&&lastTitle===undefined&&current)pendingPlaybackIndex=current.index;
     const pending = state.rows.filter(r => !r.done);
     writeStatus({ ...state, running: true, pending: pending.length, updated: new Date().toISOString() },2);
     await showStatus(watchDeadline?'30分钟播放运行中 · 剩余约'+Math.max(0,Math.ceil((watchDeadline-Date.now())/60000))+'分钟':'自动照看运行中 · 剩余'+pending.length+'节');
@@ -318,6 +320,11 @@ async function main() {
     }
     if (state.dialogs.length) throw Error('出现需人工确认的弹窗，停止：' + state.dialogs.join(' / ').slice(0,800));
     if (!state.video) throw Error('未找到视频播放器');
+    if(pendingPlaybackIndex===current?.index){
+      if(await resumePlayback(page,playbackOptions)===false)continue;
+      pendingPlaybackIndex=null;lastTime=-1;stalledSince=null;
+      event('resumed',{title:state.title});continue;
+    }
     if(!state.video.ended){
       if(state.video.paused&&await resumePlayback(page,playbackOptions)===false)continue;
       if(await setPlaybackPreferences(page,playbackOptions)===false)continue;
@@ -344,18 +351,21 @@ async function main() {
         if (!next) { event('complete', { videos: state.rows.length }); writeStatus({ running:false, complete:true, videos:state.rows.length, updated:new Date().toISOString() }); return; }
         await waitVerification();
         if(fs.existsSync(stopFile))break;
+        pendingPlaybackIndex=next.index;
         await page.locator(state.catalogueSelector).nth(next.index).locator(state.titleSelector).click({ timeout: 10000 });
         event('next-video', { title: next.title });
         lastTime = -1; stalledSince = null; previousEvent = null;
         if(next.index!==current?.index){
           // The catalogue can change before the old video's ended state clears.
           // Wait for the replacement media (or a dialog) before considering another switch.
-          await page.waitForFunction(()=>{
+          await page.waitForFunction(({selector,index,source,duration})=>{
             const d=window.__wisdomJevDetector;
             if([...document.querySelectorAll('[role="dialog"], .ai-test-question-wrapper, .ai-class-exercise-dialog')].some(e=>d?.visible(e)))return true;
             const v=document.querySelector('#vjs_container_html5_api')||document.querySelector('video:not(.virtual-human-video)');
-            return v&&!v.ended&&v.readyState>=2;
-          },null,{timeout:15000});
+            const row=document.querySelectorAll(selector)[index];
+            const selected=row&&(row.classList.contains('current')||row.classList.contains('current_play'));
+            return selected&&v&&v.readyState>=2&&(!v.ended||(v.currentSrc||v.src)!==source||Math.abs(v.duration-duration)>0.1);
+          },{selector:state.catalogueSelector,index:next.index,source:state.video.source,duration:state.video.duration},{timeout:15000});
         }
         await sleep(500);
         if(fs.existsSync(stopFile))break;

@@ -13,7 +13,7 @@ function readCatalogueDom(){
  const current=rows.find(r=>r.current);
  return {catalogueSelector,titleSelector,layout:mooc?'mooc':modern?'wisdom':'classic',rows,
   title:document.querySelector('#lessonOrder')?.textContent?.trim()||current?.title||null,
-  video:v?{time:v.currentTime,duration:v.duration,paused:v.paused,ended:v.ended,rate:v.playbackRate,muted:v.muted,volume:v.volume}:null,
+  video:v?{time:v.currentTime,duration:v.duration,source:v.currentSrc||v.src,paused:v.paused,ended:v.ended,rate:v.playbackRate,muted:v.muted,volume:v.volume}:null,
  };
 }
 module.exports={readCatalogueDom};

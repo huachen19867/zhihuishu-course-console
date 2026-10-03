@@ -34,6 +34,19 @@ async function fixture(page, mode) {
     assert.ok(await page.evaluate(()=>document.querySelector('video').currentTime)>0);
     await fixture(page,'blocked');
     await assert.rejects(resumePlayback(page),/播放重试后仍未看到时间推进/);
-    console.log('Playback checks passed: hidden controls, media fallback, stalled playback rejection.');
+    // Previously completed lessons can reopen at their end with no visible controls.
+    await page.setContent('<video style="display:none"></video>');
+    await page.evaluate(()=>{
+      const v=document.querySelector('video');let ended=true,started=0;
+      Object.defineProperties(v,{
+        ended:{get:()=>ended},paused:{get:()=>ended},readyState:{get:()=>4},
+        currentTime:{get:()=>ended?60:(Date.now()-started)/1000,set:()=>{throw Error('Do not seek artificially');}},
+        play:{value:async()=>{ended=false;started=Date.now();}},
+      });
+    });
+    assert.equal(await resumePlayback(page),true);
+    assert.equal(await page.evaluate(()=>document.querySelector('video').ended),false);
+    assert.ok(await page.evaluate(()=>document.querySelector('video').currentTime)>0);
+    console.log('Playback checks passed: hidden controls, media fallback, ended-lesson replay, stalled playback rejection.');
   } finally { await browser.close(); }
 })().catch(e=>{console.error(e.message);process.exitCode=1});

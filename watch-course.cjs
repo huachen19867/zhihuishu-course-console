@@ -351,8 +351,12 @@ async function main() {
         if (!next) { event('complete', { videos: state.rows.length }); writeStatus({ running:false, complete:true, videos:state.rows.length, updated:new Date().toISOString() }); return; }
         await waitVerification();
         if(fs.existsSync(stopFile))break;
+        const target=page.locator(state.catalogueSelector).nth(next.index).locator(state.titleSelector);
+        await target.scrollIntoViewIfNeeded({timeout:5000});
+        await waitVerification();
+        if(fs.existsSync(stopFile))break;
         pendingPlaybackIndex=next.index;
-        await page.locator(state.catalogueSelector).nth(next.index).locator(state.titleSelector).click({ timeout: 10000 });
+        await target.click({ timeout: 10000 });
         event('next-video', { title: next.title });
         lastTime = -1; stalledSince = null; previousEvent = null;
         if(next.index!==current?.index){
